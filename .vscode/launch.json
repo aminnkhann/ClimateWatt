@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Level 1: Download weather",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/get_weather.py",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Level 1: Prepare prices",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/prepare_prices.py",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Level 1: Build dataset",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/build_dataset.py",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Level 2: Run pipeline",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "weather_energy.run_pipeline",
+      "console": "integratedTerminal"
+    }
+  ]
+}
