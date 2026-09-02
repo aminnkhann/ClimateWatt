@@ -31,6 +31,8 @@ The project is split into three developer workstreams.
 
 ### Developer 1 - Weather Ingestion Owner
 
+Engineer: Mahnoosh
+
 Responsible for:
 
 - Weather API requests
@@ -46,6 +48,8 @@ Independent deliverables:
 
 ### Developer 2 - Electricity Price Owner
 
+Engineer: Maryam
+
 Responsible for:
 
 - Preparing the electricity sample CSV
@@ -60,6 +64,8 @@ Independent deliverables:
 - `src/weather_energy/clients/price_client.py`
 
 ### Developer 3 - Join, Database, and Orchestration Owner
+
+Engineer: Amin
 
 Responsible for:
 
@@ -501,4 +507,3 @@ Each issue should contain:
 - PostgreSQL loading is idempotent.
 - Airflow runs the pipeline daily.
 - The whole project can be explained by reading this file and the README.
-
