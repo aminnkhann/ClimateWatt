@@ -39,3 +39,4 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+*.egg-info/
