@@ -10,6 +10,7 @@ Naive source timestamps are interpreted as German local time before conversion t
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -21,6 +22,7 @@ OUTPUT_DIR = BASE_DIR / "data" / "output"
 OUTPUT_PATH = OUTPUT_DIR / "prices.csv"
 DEFAULT_MARKET_AREA = "DE-LU"
 SOURCE_TIMEZONE = "Europe/Berlin"
+DST_GAP = timedelta(hours=1)
 
 REQUIRED_COLUMNS = {
     "timestamp_utc",
@@ -68,8 +70,19 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def parse_timestamp(value: object) -> pd.Timestamp:
-    """Parse one timestamp, treating naive values as German local time."""
+def parse_timestamp(
+    value: object,
+    *,
+    ambiguous: bool = True,
+) -> pd.Timestamp:
+    """Parse one timestamp, treating naive values as German local time.
+
+    A nonexistent spring-transition time is moved forward by the one-hour DST
+    gap, preserving its minutes. For a standalone ambiguous autumn-transition
+    time, ``ambiguous=True`` selects the first (summer-time) occurrence. The
+    dataframe preparation function assigns repeated occurrences in source
+    order so that both market hours are retained.
+    """
 
     timestamp = pd.to_datetime(value, errors="coerce")
 
@@ -81,14 +94,49 @@ def parse_timestamp(value: object) -> pd.Timestamp:
     if timestamp.tzinfo is None:
         timestamp = timestamp.tz_localize(
             SOURCE_TIMEZONE,
-            ambiguous="NaT",
-            nonexistent="NaT",
+            ambiguous=ambiguous,
+            nonexistent=DST_GAP,
         )
 
-        if pd.isna(timestamp):
-            return pd.NaT
-
     return timestamp.tz_convert("UTC")
+
+
+def parse_timestamp_series(
+    values: pd.Series,
+    market_areas: pd.Series,
+) -> pd.Series:
+    """Parse timestamps and distinguish repeated local times in source order.
+
+    For each market area and naive wall-clock timestamp, the first occurrence
+    uses the DST offset and the second uses the standard-time offset. Further
+    duplicate occurrences alternate between those offsets. Explicitly zoned
+    source timestamps keep their supplied offset.
+    """
+
+    occurrence_counts: dict[tuple[object, pd.Timestamp], int] = {}
+    parsed_values: list[pd.Timestamp] = []
+
+    for value, market_area in zip(values, market_areas, strict=True):
+        timestamp = pd.to_datetime(value, errors="coerce")
+
+        if pd.isna(timestamp):
+            parsed_values.append(pd.NaT)
+            continue
+
+        timestamp = pd.Timestamp(timestamp)
+        ambiguous = True
+
+        if timestamp.tzinfo is None:
+            key = (market_area, timestamp)
+            occurrence = occurrence_counts.get(key, 0)
+            occurrence_counts[key] = occurrence + 1
+            ambiguous = occurrence % 2 == 0
+
+        parsed_values.append(
+            parse_timestamp(timestamp, ambiguous=ambiguous)
+        )
+
+    return pd.Series(parsed_values, index=values.index, dtype="datetime64[ns, UTC]")
 
 
 def normalize_price(value: object) -> str | None:
@@ -131,7 +179,10 @@ def prepare_prices(df: pd.DataFrame) -> pd.DataFrame:
 
     df = df.copy()
 
-    df["timestamp_utc"] = df["timestamp_utc"].map(parse_timestamp)
+    df["timestamp_utc"] = parse_timestamp_series(
+        df["timestamp_utc"],
+        df["market_area"],
+    )
 
     # Works independently of pandas string dtype implementation
     cleaned_prices = df["electricity_price_eur_mwh"].map(normalize_price)

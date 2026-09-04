@@ -36,15 +36,52 @@ def test_parse_timestamp_with_timezone():
 
 
 @pytest.mark.parametrize(
-    "input_val",
+    "input_val, expected",
     [
-        "2026-03-29 02:30:00",  # nicht existente Stunde bei Umstellung auf Sommerzeit
-        "2026-10-25 02:30:00",  # doppelte Stunde bei Umstellung auf Winterzeit
+        # Die nicht existente Zeit wird um die DST-Lücke vorgeschoben.
+        ("2026-03-29 02:30:00", "2026-03-29T01:30:00Z"),
+        # Ohne Reihen-Kontext wird die erste (Sommerzeit-)Instanz gewählt.
+        ("2026-10-25 02:30:00", "2026-10-25T00:30:00Z"),
     ],
 )
-def test_parse_timestamp_dst_edge_cases(input_val):
-    """Nicht eindeutig konvertierbare lokale Zeitstempel werden verworfen."""
-    assert pd.isna(parse_timestamp(input_val))
+def test_parse_timestamp_dst_edge_cases(input_val, expected):
+    """DST-Randzeiten werden nach einer dokumentierten Regel aufgelöst."""
+    assert parse_timestamp(input_val).strftime("%Y-%m-%dT%H:%M:%SZ") == expected
+
+
+def test_prepare_prices_preserves_repeated_autumn_hour():
+    """Beide Instanzen einer doppelten lokalen Stunde bleiben erhalten."""
+    input_df = pd.DataFrame(
+        {
+            "timestamp": [
+                "2026-10-25 02:00:00",
+                "2026-10-25 02:00:00",
+            ],
+            "price": [10, 20],
+        }
+    )
+
+    result = prepare_prices(input_df)
+
+    assert result[["timestamp_utc", "electricity_price_eur_mwh"]].values.tolist() == [
+        ["2026-10-25T00:00:00Z", 10.0],
+        ["2026-10-25T01:00:00Z", 20.0],
+    ]
+
+
+def test_prepare_prices_preserves_nonexistent_spring_time():
+    """Eine Zeit in der Frühjahrs-Lücke wird nicht als ungültig verworfen."""
+    input_df = pd.DataFrame(
+        {
+            "timestamp": ["2026-03-29 02:30:00"],
+            "price": [30],
+        }
+    )
+
+    result = prepare_prices(input_df)
+
+    assert result.iloc[0]["timestamp_utc"] == "2026-03-29T01:00:00Z"
+    assert result.iloc[0]["electricity_price_eur_mwh"] == 30.0
 
 
 @pytest.mark.parametrize(
