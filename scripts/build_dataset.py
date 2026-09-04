@@ -39,6 +39,7 @@ def load_weather(path: Path) -> pd.DataFrame:
         raise ValueError(f"Weather file is missing required columns: {sorted(missing)}")
 
     weather["timestamp_utc"] = pd.to_datetime(weather["timestamp_utc"], utc=True, errors="coerce")
+    weather["temperature_c"] = pd.to_numeric(weather["temperature_c"], errors="coerce")
     weather = weather.dropna(subset=["timestamp_utc", "city", "temperature_c"])
     return weather
 
@@ -53,15 +54,24 @@ def load_prices(path: Path) -> pd.DataFrame:
         raise ValueError(f"Price file is missing required columns: {sorted(missing)}")
 
     prices["timestamp_utc"] = pd.to_datetime(prices["timestamp_utc"], utc=True, errors="coerce")
+    prices["electricity_price_eur_mwh"] = pd.to_numeric(
+        prices["electricity_price_eur_mwh"], errors="coerce"
+    )
     prices = prices.dropna(subset=["timestamp_utc", "market_area", "electricity_price_eur_mwh"])
     return prices
 
 
 def build_dataset(weather: pd.DataFrame, prices: pd.DataFrame) -> pd.DataFrame:
     """Join weather and price data on UTC timestamps and keep the final columns."""
-    weather = weather.drop_duplicates(subset=["timestamp_utc", "city"])
-    prices = prices.drop_duplicates(subset=["timestamp_utc", "market_area"])
+    if weather.duplicated(subset=["timestamp_utc", "city"]).any():
+        raise ValueError("Weather data contains duplicate timestamp_utc and city values")
+    if prices.duplicated(subset=["timestamp_utc", "market_area"]).any():
+        raise ValueError("Price data contains duplicate timestamp_utc and market_area values")
+
     merged = weather.merge(prices, on="timestamp_utc", how="inner", validate="one_to_one")
+    if merged.empty:
+        raise ValueError("Weather and price data have no shared timestamp_utc values")
+
     merged = merged.loc[:, FINAL_COLUMNS].copy()
     merged = merged.dropna(subset=FINAL_COLUMNS)
     merged = merged.sort_values("timestamp_utc").drop_duplicates(subset=["timestamp_utc"])
