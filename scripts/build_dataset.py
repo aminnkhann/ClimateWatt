@@ -31,6 +31,8 @@ FINAL_COLUMNS = [
 
 def load_weather(path: Path) -> pd.DataFrame:
     """Load the weather output and validate the required columns."""
+    if not path.exists():
+        raise FileNotFoundError(f"Weather file does not exist: {path}")
     weather = pd.read_csv(path)
     missing = REQUIRED_WEATHER_COLUMNS - set(weather.columns)
     if missing:
@@ -43,6 +45,8 @@ def load_weather(path: Path) -> pd.DataFrame:
 
 def load_prices(path: Path) -> pd.DataFrame:
     """Load the prepared price output and validate the required columns."""
+    if not path.exists():
+        raise FileNotFoundError(f"Price file does not exist: {path}")
     prices = pd.read_csv(path)
     missing = REQUIRED_PRICE_COLUMNS - set(prices.columns)
     if missing:
@@ -55,13 +59,17 @@ def load_prices(path: Path) -> pd.DataFrame:
 
 def build_dataset(weather: pd.DataFrame, prices: pd.DataFrame) -> pd.DataFrame:
     """Join weather and price data on UTC timestamps and keep the final columns."""
+    weather = weather.drop_duplicates(subset=["timestamp_utc", "city"])
+    prices = prices.drop_duplicates(subset=["timestamp_utc", "market_area"])
     merged = weather.merge(prices, on="timestamp_utc", how="inner", validate="one_to_one")
     merged = merged.loc[:, FINAL_COLUMNS].copy()
     merged = merged.dropna(subset=FINAL_COLUMNS)
     merged = merged.sort_values("timestamp_utc").drop_duplicates(subset=["timestamp_utc"])
     if merged["timestamp_utc"].duplicated().any():
         raise ValueError("Final dataset contains duplicate timestamp_utc values")
-    merged["timestamp_utc"] = merged["timestamp_utc"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    merged["timestamp_utc"] = pd.to_datetime(merged["timestamp_utc"], utc=True).dt.strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
     return merged
 
 
