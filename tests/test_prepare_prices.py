@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from scripts.prepare_prices import (
+from weather_energy.clients.price_client import (
     normalize_price,
     parse_timestamp,
     prepare_prices,
@@ -26,6 +26,22 @@ def test_parse_timestamp_invalid():
     """Ungültige Zeitstempel müssen pd.NaT zurückgeben."""
     assert pd.isna(parse_timestamp("invalid-date"))
     assert pd.isna(parse_timestamp(None))
+
+
+def test_prepare_prices_german_date_is_day_first():
+    result = prepare_prices(
+        pd.DataFrame({"timestamp": ["01.02.2026 10:00"], "price": ["25,5"]})
+    )
+    assert result.iloc[0]["timestamp_utc"] == "2026-02-01T09:00:00Z"
+    assert result.iloc[0]["electricity_price_eur_mwh"] == 25.5
+
+
+@pytest.mark.parametrize("price", ["inf", "-inf"])
+def test_prepare_prices_rejects_infinite_prices(price):
+    with pytest.raises(ValueError, match="No valid electricity price rows remain"):
+        prepare_prices(
+            pd.DataFrame({"timestamp": ["2026-01-10T00:00:00Z"], "price": [price]})
+        )
 
 
 def test_parse_timestamp_with_timezone():
@@ -200,3 +216,24 @@ def test_read_price_csv_handles_semicolon(tmp_path: Path):
     assert "price" in df.columns
     assert len(df) == 1
     assert df.iloc[0]["price"] == "50,0"
+
+def test_prepare_prices_normalizes_market_area_before_dst_handling():
+    input_df = pd.DataFrame(
+        {
+            "timestamp": [
+                "2026-10-25 02:00:00",
+                "2026-10-25 02:00:00",
+            ],
+            "market_area": ["DE-LU", " DE-LU "],
+            "price": [10, 20],
+        }
+    )
+
+    result = prepare_prices(input_df)
+
+    assert result[
+        ["timestamp_utc", "electricity_price_eur_mwh"]
+    ].values.tolist() == [
+        ["2026-10-25T00:00:00Z", 10.0],
+        ["2026-10-25T01:00:00Z", 20.0],
+    ]
