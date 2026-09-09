@@ -12,6 +12,10 @@ class Settings:
 
     prices_csv: Path
     output_dir: Path
+    city: str = "Hamburg"
+    latitude: float = 53.5511
+    longitude: float = 9.9937
+    database_url: str = "postgresql://weather_user:weather_password@localhost:5432/weather_energy"
 
 
 def get_settings() -> Settings:
