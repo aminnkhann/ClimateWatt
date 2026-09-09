@@ -100,6 +100,10 @@ Start small. Create folders only when a level needs them.
 
 For Level 1, use a small, known price-data sample covering a few days. It is acceptable to download a public SMARD export manually and save a reduced sample in `data/input/`. This keeps the first version simple and makes debugging easier.
 
+The committed Level 1 sample is a small hand-curated teaching fixture based on the
+SMARD-style hourly price format. It is not a live market export and is included only
+to make the pipeline reproducible without an external download.
+
 ### Deliverables
 
 ```text
