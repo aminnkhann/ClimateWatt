@@ -9,7 +9,6 @@ from pathlib import Path
 import pandas as pd
 import requests
 
-
 API_URL = "https://archive-api.open-meteo.com/v1/archive"
 OUTPUT_PATH = Path(__file__).resolve().parents[1] / "data" / "output" / "weather.csv"
 HOURLY_FIELDS = (
@@ -70,7 +69,11 @@ def fetch_weather(
     start_date: date,
     end_date: date,
 ) -> pd.DataFrame:
-    """Fetch and validate hourly weather values for one location."""
+    """Fetch one city's hourly weather, keyed by (timestamp_utc, city)."""
+    city = city.strip()
+    if not city:
+        raise ValueError("city must not be empty")
+
     params = {
         "latitude": latitude,
         "longitude": longitude,
@@ -110,7 +113,7 @@ def fetch_weather(
     weather = pd.DataFrame(
         {
             "timestamp_utc": pd.to_datetime(hourly["time"], utc=True, errors="raise"),
-            "city": city.strip(),
+            "city": city,
             "temperature_c": hourly["temperature_2m"],
             "relative_humidity_percent": hourly["relative_humidity_2m"],
             "wind_speed_kmh": hourly["wind_speed_10m"],
@@ -124,8 +127,8 @@ def fetch_weather(
     )
     if weather[list(OUTPUT_COLUMNS)].isna().any().any():
         raise ValueError("Open-Meteo returned missing or invalid required values")
-    if weather["timestamp_utc"].duplicated().any():
-        raise ValueError("Open-Meteo returned duplicate UTC timestamps")
+    if weather.duplicated(subset=["timestamp_utc", "city"]).any():
+        raise ValueError("Open-Meteo returned duplicate (timestamp_utc, city) keys")
 
     weather["timestamp_utc"] = weather["timestamp_utc"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     return weather[list(OUTPUT_COLUMNS)]
