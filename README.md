@@ -468,3 +468,56 @@ Only start these after all Level 3 definition-of-done items work.
 ## License
 
 Choose a license before publishing the repository. MIT is a simple option for a learning portfolio project.
+
+## Engineer 1 — Level 2 weather component
+
+The implemented package follows the structure in `PROJECT_SETUP_GUIDE.md`:
+`src/weather_energy/`. Install it from the repository root:
+
+```bash
+uv sync --extra dev --extra database
+source .venv/bin/activate
+```
+
+`clients/weather_client.py` now provides `fetch_weather(start_date, end_date)`
+with Hamburg as the default city. It returns the six weather columns from the
+Level 1 script, with timezone-aware UTC datetimes and numeric measurements.
+It rejects missing fields, invalid values, non-hourly timestamps, and duplicate
+`(timestamp_utc, city)` keys. Requests use a 30-second timeout; logs include the
+requested dates, city, row count, and request failures.
+
+The existing CSV command still works and writes timestamps ending in `Z`:
+
+```bash
+python scripts/get_weather.py --start-date 2025-01-01 --end-date 2025-01-07
+pytest
+ruff check .
+```
+
+For the teammate integrating PostgreSQL, apply `sql/create_tables.sql` to the
+configured database first. It currently creates only `raw.weather_hourly`.
+Then use the weather functions inside a caller-managed transaction:
+
+```python
+import os
+from datetime import date
+
+import psycopg
+
+from weather_energy.clients.weather_client import fetch_weather
+from weather_energy.database.loader import load_weather
+
+weather = fetch_weather(date(2025, 1, 1), date(2025, 1, 7))
+# Set DATABASE_URL in your environment; never commit credentials.
+with psycopg.connect(os.environ["DATABASE_URL"]) as connection:
+    load_weather(connection, weather)
+```
+
+The connection context commits on success and rolls back on failure. The loader
+validates again before SQL and uses `ON CONFLICT (timestamp_utc, city) DO UPDATE`,
+so existing hours are updated rather than inserted twice.
+
+This completes the weather component's implementation. Shared Docker setup,
+price/analytics database tables, and the full Level 2 pipeline entry point still
+need team integration. Unit tests mock HTTP and database connections; they do
+not establish that a live API request or PostgreSQL deployment works.
