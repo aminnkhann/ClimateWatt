@@ -4,6 +4,7 @@ import logging
 from datetime import date
 
 from weather_energy.clients.price_client import prepare_prices, read_price_csv
+from weather_energy.clients.weather_client import fetch_weather
 from weather_energy.config import get_settings
 from weather_energy.database.loader import (
     initialize_database,
@@ -21,11 +22,13 @@ def run() -> None:
     """Fetch, transform, and idempotently load the configured Level 2 data."""
     import psycopg
 
-    from scripts.get_weather import fetch_weather
-
     settings = get_settings()
     weather = fetch_weather(
-        settings.city, settings.latitude, settings.longitude, date(2025, 1, 1), date(2025, 1, 7)
+        date(2025, 1, 1),
+        date(2025, 1, 7),
+        city=settings.city,
+        latitude=settings.latitude,
+        longitude=settings.longitude,
     )
     prices = prepare_prices(read_price_csv(settings.prices_csv))
     dataset = build_hourly_dataset(weather, prices)
