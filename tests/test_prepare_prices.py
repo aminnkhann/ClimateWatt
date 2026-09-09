@@ -1,5 +1,7 @@
 """Tests for the Level 1 prepare_prices script."""
 
+from types import SimpleNamespace
+
 import pandas as pd
 
 from scripts import prepare_prices
@@ -22,8 +24,9 @@ def test_main_reads_prepares_and_writes_csv(tmp_path, monkeypatch, capsys):
     )
     input_df.to_csv(input_path, index=False)
 
-    monkeypatch.setattr(prepare_prices, "INPUT_PATH", input_path)
-    monkeypatch.setattr(prepare_prices, "OUTPUT_PATH", output_path)
+    monkeypatch.setattr(prepare_prices, "get_settings", lambda: SimpleNamespace(
+        prices_csv=input_path, output_dir=output_path.parent,
+    ))
 
     prepare_prices.main()
 
