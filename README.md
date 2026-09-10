@@ -83,6 +83,7 @@ Start small. Create folders only when a level needs them.
 ├── docker-compose.yml         # Added in Level 2
 ├── requirements.txt
 ├── .env.example
+├── .env.city                  # Local city and weather-range settings
 ├── .gitignore
 └── README.md
 ```
@@ -336,6 +337,26 @@ SELECT * FROM analytics.weather_energy_hourly ORDER BY timestamp_utc DESC LIMIT 
 - Errors are logged with useful messages.
 - The team can delete the Docker volume, start again, and rebuild the data successfully.
 
+### Runtime configuration
+
+The application loads general settings from `.env` and city-specific settings
+from `.env.city`. The city file keeps location and date-range configuration
+separate from database credentials:
+
+```env
+CITY_NAME=Hamburg
+CITY_LATITUDE=53.5511
+CITY_LONGITUDE=9.9937
+WEATHER_START_DATE=2025-01-01
+WEATHER_DAYS=180
+```
+
+`WEATHER_DAYS=180` requests an inclusive six-month weather range (approximately
+4,320 hourly rows). The final analytics table can only contain timestamps that
+also exist in the electricity-price input, so the price data must cover the
+same period to produce six months of joined results. `DATABASE_URL` should use
+the Docker host port configured in Compose (`5442` in the local setup).
+
 ## Level 3 — Semi-professional Airflow pipeline
 
 **Target:** Airflow schedules the existing Python pipeline daily and shows task status and logs.
@@ -489,7 +510,7 @@ requested dates, city, row count, and request failures.
 The existing CSV command still works and writes timestamps ending in `Z`:
 
 ```bash
-python scripts/get_weather.py --start-date 2025-01-01 --end-date 2025-01-07
+python scripts/get_weather.py --start-date 2025-01-01 --end-date 2025-06-29
 pytest
 ruff check .
 ```

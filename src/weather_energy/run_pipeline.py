@@ -1,7 +1,7 @@
 """Run the Level 2 weather-energy pipeline."""
 
 import logging
-from datetime import date
+from datetime import timedelta
 
 from weather_energy.clients.price_client import prepare_prices, read_price_csv
 from weather_energy.clients.weather_client import fetch_weather
@@ -23,9 +23,10 @@ def run() -> None:
     import psycopg
 
     settings = get_settings()
+    end_date = settings.weather_start_date + timedelta(days=settings.weather_days - 1)
     weather = fetch_weather(
-        date(2025, 1, 1),
-        date(2025, 1, 7),
+        settings.weather_start_date,
+        end_date,
         city=settings.city,
         latitude=settings.latitude,
         longitude=settings.longitude,
