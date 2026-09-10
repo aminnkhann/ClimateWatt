@@ -139,6 +139,7 @@ def test_loader_passes_typed_rows_and_leaves_transaction_to_caller(weather_api):
     connection = MagicMock()
     assert load_weather(connection, download()) == 2
     _, rows = connection.cursor.return_value.__enter__.return_value.executemany.call_args.args
+    rows = list(rows)
     assert rows[0][0].utcoffset().total_seconds() == 0
     assert rows[0][1:] == ("Hamburg", 1.0, 70, 5.0, 10)
     connection.commit.assert_not_called()

@@ -1,1 +1,45 @@
-"""Placeholder tests for future transformation logic."""
+"""Tests for Level 2 transformation and validation."""
+
+import pandas as pd
+import pytest
+
+from weather_energy.transform.weather_energy import build_hourly_dataset
+
+
+def test_build_hourly_dataset_joins_and_normalizes_timestamps():
+    weather = pd.DataFrame(
+        {
+            "timestamp_utc": ["2025-01-01T00:00:00+01:00"],
+            "city": ["Hamburg"],
+            "temperature_c": [5.5],
+        }
+    )
+    prices = pd.DataFrame(
+        {
+            "timestamp_utc": ["2024-12-31T23:00:00Z"],
+            "market_area": ["DE-LU"],
+            "electricity_price_eur_mwh": [81.5],
+        }
+    )
+    result = build_hourly_dataset(weather, prices)
+    assert result.loc[0, "timestamp_utc"] == "2024-12-31T23:00:00Z"
+    assert result.loc[0, "electricity_price_eur_mwh"] == 81.5
+
+
+def test_build_hourly_dataset_rejects_duplicate_business_keys():
+    weather = pd.DataFrame(
+        {
+            "timestamp_utc": ["2025-01-01T00:00:00Z"] * 2,
+            "city": ["Hamburg", "Hamburg"],
+            "temperature_c": [1, 2],
+        }
+    )
+    prices = pd.DataFrame(
+        {
+            "timestamp_utc": ["2025-01-01T00:00:00Z"],
+            "market_area": ["DE-LU"],
+            "electricity_price_eur_mwh": [50],
+        }
+    )
+    with pytest.raises(ValueError, match="duplicate business keys"):
+        build_hourly_dataset(weather, prices)
