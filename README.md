@@ -84,6 +84,7 @@ Start small. Create folders only when a level needs them.
 ├── requirements.txt
 ├── .env.example
 ├── .env.city                  # Local city and weather-range settings
+├── .env.city.example           # Safe template for city settings
 ├── .gitignore
 └── README.md
 ```
@@ -356,6 +357,8 @@ WEATHER_DAYS=180
 also exist in the electricity-price input, so the price data must cover the
 same period to produce six months of joined results. `DATABASE_URL` should use
 the Docker host port configured in Compose (`5442` in the local setup).
+The runner logs a warning when the price range does not cover the requested
+weather range.
 
 ## Level 3 — Semi-professional Airflow pipeline
 

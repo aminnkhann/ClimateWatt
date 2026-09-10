@@ -32,6 +32,19 @@ def run() -> None:
         longitude=settings.longitude,
     )
     prices = prepare_prices(read_price_csv(settings.prices_csv))
+    weather_start = weather["timestamp_utc"].min()
+    weather_end = weather["timestamp_utc"].max()
+    price_start = prices["timestamp_utc"].min()
+    price_end = prices["timestamp_utc"].max()
+    if price_start > weather_start or price_end < weather_end:
+        LOGGER.warning(
+            "Price data covers %s to %s, while weather covers %s to %s; "
+            "analytics will contain only overlapping timestamps",
+            price_start,
+            price_end,
+            weather_start,
+            weather_end,
+        )
     dataset = build_hourly_dataset(weather, prices)
     with psycopg.connect(settings.database_url) as connection:
         initialize_database(connection)
