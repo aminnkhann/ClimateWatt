@@ -12,6 +12,13 @@ The project studies a simple question:
 
 This is a **batch** project. It is not a Kafka or real-time streaming project. Kafka can be explored later as an optional learning exercise, but it is not needed to deliver this project.
 
+## Current status
+
+Levels 1 and 2 are implemented. The current pipeline can fetch a configurable
+city's hourly weather, normalize electricity prices, join both datasets, and
+load raw and analytics tables into PostgreSQL. The project is ready for the
+Level 3 Airflow orchestration work described below.
+
 ## Learning goals
 
 By completing the levels, the team will practice:
@@ -84,7 +91,7 @@ Start small. Create folders only when a level needs them.
 ├── requirements.txt
 ├── .env.example
 ├── .env.city                  # Local city and weather-range settings
-├── .env.city.example           # Safe template for city settings
+├── .env.city.example          # Safe template for city settings
 ├── .gitignore
 └── README.md
 ```
@@ -217,6 +224,26 @@ python -c "import pandas as pd; print(pd.read_csv('data/output/weather_energy_ho
 
 Do not add Airflow yet. First make the Python pipeline reliable when run manually.
 
+### Install and run the current Level 2 pipeline
+
+From the repository root:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate       # Linux/macOS
+# .venv\Scripts\activate       # Windows PowerShell
+pip install -e ".[database,dev]"
+cp .env.example .env            # create and edit this local file
+cp .env.city.example .env.city  # create and edit this local file
+docker compose up -d postgres
+python -m weather_energy.run_pipeline
+```
+
+The pipeline fetches weather from Open-Meteo, reads the configured price CSV,
+creates the database schemas and tables, and upserts weather, price, and joined
+analytics records. It can be run repeatedly without creating duplicate business
+keys.
+
 ### Suggested structure
 
 ```text
@@ -261,11 +288,11 @@ services:
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_DB: weather_energy
-      POSTGRES_USER: weather_user
-      POSTGRES_PASSWORD: weather_password
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./sql/create_tables.sql:/docker-entrypoint-initdb.d/create_tables.sql
@@ -281,6 +308,10 @@ Use an `.env` file instead of committing real passwords. The values above are ac
 ```bash
 docker compose up -d postgres
 ```
+
+The local Compose file maps PostgreSQL to host port `5442`. pgAdmin or another
+SQL client should connect to `localhost:5442`, database `weather_energy`, using
+the credentials in `.env`.
 
 4. Move code from `scripts/` into small functions in `src/`.
 
@@ -329,10 +360,16 @@ SELECT COUNT(*) FROM analytics.weather_energy_hourly;
 SELECT * FROM analytics.weather_energy_hourly ORDER BY timestamp_utc DESC LIMIT 10;
 ```
 
+In pgAdmin, query the table with its schema-qualified name:
+
+```sql
+SELECT * FROM analytics.weather_energy_hourly;
+```
+
 ### Level 2 definition of done
 
 - `docker compose up -d postgres` starts PostgreSQL.
-- `python -m src.run_pipeline` loads raw and analytics tables.
+- `python -m weather_energy.run_pipeline` loads raw and analytics tables.
 - Running the command twice does not create duplicate keys.
 - At least two automated tests pass.
 - Errors are logged with useful messages.
@@ -360,6 +397,13 @@ the Docker host port configured in Compose (`5442` in the local setup).
 The runner logs a warning when the price range does not cover the requested
 weather range.
 
+The committed price CSV is intentionally a very small teaching fixture. It is
+enough to test parsing and joins, but it does not contain six months of prices.
+For a complete six-month analytics dataset, replace it with a matching
+six-month electricity-price export before running the pipeline. The warning in
+the logs makes a mismatch visible, while the inner join keeps only timestamps
+available in both sources.
+
 ## Level 3 — Semi-professional Airflow pipeline
 
 **Target:** Airflow schedules the existing Python pipeline daily and shows task status and logs.
@@ -373,6 +417,7 @@ Airflow is an orchestrator. It should call the tested Python functions from Leve
 - Separate tasks for weather, prices, raw loading, transformation, and validation.
 - Daily scheduling, retries, and logs.
 - A manual trigger for testing.
+- A clear separation between orchestration and business logic.
 
 ### DAG design
 
@@ -395,6 +440,25 @@ retry_delay=5 minutes
 ```
 
 The schedule means: run every day at 02:00. Store timestamps in UTC and document the Airflow timezone used by the team.
+
+### How Level 3 will use Level 2
+
+The DAG should calculate the processing date or date range, then call the same
+tested functions already used by the manual runner. Airflow should coordinate
+tasks, retries, dependencies, and logs; it should not reimplement HTTP calls,
+timestamp normalization, joins, or SQL loading.
+
+The preferred first DAG is:
+
+```text
+fetch_weather -> load_weather_raw ----+
+                                      +-> build_analytics -> validate_analytics
+fetch_prices  -> load_prices_raw -----+
+```
+
+Each task should report its input range and row count without logging passwords
+or full connection URLs. A failed upstream task should prevent downstream data
+loading, and retries should be limited to transient API or database failures.
 
 ### Step-by-step
 
@@ -438,6 +502,15 @@ docker compose up -d
 - The analytics table has no duplicate business keys after repeated DAG runs.
 - The README includes one screenshot of a successful DAG run after it is implemented.
 
+### Level 3 implementation order
+
+1. Add Airflow services and health checks to a separate Compose profile.
+2. Add a minimal DAG that calls the existing pipeline once.
+3. Split the DAG into weather, price, load, transform, and validation tasks.
+4. Add retries, task timeouts, `catchup=False`, and a documented schedule.
+5. Test a manual run, an intentional failure, and a repeated run.
+6. Add the successful-run screenshot and operating instructions to this README.
+
 ## Nice-to-have ideas
 
 Only start these after all Level 3 definition-of-done items work.
@@ -449,6 +522,22 @@ Only start these after all Level 3 definition-of-done items work.
 - Add another city and compare locations.
 - Add data freshness checks.
 - Add a simple data-quality report.
+
+## Near-term project vision
+
+After Level 3, this project can become a small but realistic energy analytics
+portfolio project. The next useful iteration would download price data through
+a documented source instead of relying on a hand-curated CSV, retain the raw
+source files for reproducibility, and add freshness and completeness checks.
+Once those foundations are stable, a Streamlit dashboard could show price and
+weather trends, compare cities, and expose simple relationships such as price
+changes during cold or windy periods. The dashboard should read from the
+analytics table rather than contain pipeline logic.
+
+Longer term, the team could add a forecast or anomaly-detection experiment,
+containerize the application for deployment, and use CI/CD to run tests and
+data-quality checks automatically. These ideas should follow a reliable,
+observable batch pipeline; they are not prerequisites for Level 3.
 
 ## Common rules
 
