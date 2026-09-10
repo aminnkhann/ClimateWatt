@@ -1,5 +1,6 @@
 """Configuration helpers for the Level 1 scripts."""
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,7 +16,7 @@ class Settings:
     city: str = "Hamburg"
     latitude: float = 53.5511
     longitude: float = 9.9937
-    database_url: str = "postgresql://weather_user:weather_password@localhost:5432/weather_energy"
+    database_url: str = ""
 
 
 def get_settings() -> Settings:
@@ -23,4 +24,8 @@ def get_settings() -> Settings:
     return Settings(
         prices_csv=BASE_DIR / "data" / "input" / "electricity_prices_sample.csv",
         output_dir=BASE_DIR / "data" / "output",
+        database_url=os.getenv(
+            "DATABASE_URL",
+            "postgresql://weather_user:weather_password@localhost:5432/weather_energy",
+        ),
     )

@@ -4,6 +4,8 @@ from collections.abc import Iterable
 
 import pandas as pd
 
+from weather_energy.clients.weather_client import validate_weather
+
 
 def initialize_database(connection) -> None:
     """Create database objects from the checked-in SQL schema."""
@@ -27,10 +29,18 @@ def _upsert(
         f"ON CONFLICT ({key_list}) DO UPDATE SET {updates}"
     )
     with connection.cursor() as cursor:
-        cursor.executemany(query, list(rows))
+        if updates:
+            cursor.executemany(query, rows)
+        else:
+            cursor.executemany(
+                f"INSERT INTO {table} ({column_list}) VALUES ({placeholders}) "
+                f"ON CONFLICT ({key_list}) DO NOTHING",
+                rows,
+            )
 
 
-def load_weather(connection, weather: pd.DataFrame) -> None:
+def load_weather(connection, weather: pd.DataFrame) -> int:
+    weather = validate_weather(weather)
     columns = [
         "timestamp_utc",
         "city",
@@ -46,7 +56,7 @@ def load_weather(connection, weather: pd.DataFrame) -> None:
         ["timestamp_utc", "city"],
         weather[columns].itertuples(index=False, name=None),
     )
-    connection.commit()
+    return len(weather)
 
 
 def load_prices(connection, prices: pd.DataFrame) -> None:
@@ -58,7 +68,6 @@ def load_prices(connection, prices: pd.DataFrame) -> None:
         ["timestamp_utc", "market_area"],
         prices[columns].itertuples(index=False, name=None),
     )
-    connection.commit()
 
 
 def load_analytics(connection, dataset: pd.DataFrame) -> None:
@@ -71,4 +80,3 @@ def load_analytics(connection, dataset: pd.DataFrame) -> None:
         ["timestamp_utc", "city", "market_area"],
         rows.itertuples(index=False, name=None),
     )
-    connection.commit()

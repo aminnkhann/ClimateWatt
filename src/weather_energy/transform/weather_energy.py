@@ -36,11 +36,11 @@ def build_hourly_dataset(weather: pd.DataFrame, prices: pd.DataFrame) -> pd.Data
         raise ValueError("Weather data contains duplicate business keys")
     if prices.duplicated(["timestamp_utc", "market_area"]).any():
         raise ValueError("Price data contains duplicate business keys")
-    result = weather.merge(prices, on="timestamp_utc", how="inner", validate="one_to_one")
+    result = weather.merge(prices, on="timestamp_utc", how="inner", validate="many_to_many")
     if result.empty:
         raise ValueError("Weather and price data have no shared timestamp_utc values")
     result = result[FINAL_COLUMNS].sort_values("timestamp_utc")
-    if result.duplicated("timestamp_utc").any():
-        raise ValueError("Final dataset contains duplicate timestamp_utc values")
+    if result.duplicated(["timestamp_utc", "city", "market_area"]).any():
+        raise ValueError("Final dataset contains duplicate business keys")
     result["timestamp_utc"] = result["timestamp_utc"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     return result.reset_index(drop=True)
