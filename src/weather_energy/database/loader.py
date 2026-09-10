@@ -27,16 +27,12 @@ def _upsert(
     query = (
         f"INSERT INTO {table} ({column_list}) VALUES ({placeholders}) "
         f"ON CONFLICT ({key_list}) DO UPDATE SET {updates}"
+        if updates
+        else f"INSERT INTO {table} ({column_list}) VALUES ({placeholders}) "
+        f"ON CONFLICT ({key_list}) DO NOTHING"
     )
     with connection.cursor() as cursor:
-        if updates:
-            cursor.executemany(query, rows)
-        else:
-            cursor.executemany(
-                f"INSERT INTO {table} ({column_list}) VALUES ({placeholders}) "
-                f"ON CONFLICT ({key_list}) DO NOTHING",
-                rows,
-            )
+        cursor.executemany(query, rows)
 
 
 def load_weather(connection, weather: pd.DataFrame) -> int:
