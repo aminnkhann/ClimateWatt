@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import re
 from datetime import timedelta
-
 from numbers import Number
 from pathlib import Path
 
