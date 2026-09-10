@@ -468,17 +468,29 @@ Commit this template, but never commit the real `.env` file:
 ```env
 # PostgreSQL settings for local development; needed from Level 2
 POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
+POSTGRES_PORT=5442
 POSTGRES_DB=weather_energy
 POSTGRES_USER=weather_user
 POSTGRES_PASSWORD=change_me
 
 # Application settings
-CITY=Hamburg
-LATITUDE=53.5511
-LONGITUDE=9.9937
-MARKET_AREA=DE-LU
+DATABASE_URL=postgresql://weather_user:change_me@localhost:5442/weather_energy
 ```
+
+Keep city and weather-range settings in a separate local `.env.city` file:
+
+```env
+CITY_NAME=Hamburg
+CITY_LATITUDE=53.5511
+CITY_LONGITUDE=9.9937
+WEATHER_START_DATE=2025-01-01
+WEATHER_DAYS=180
+```
+
+The pipeline calculates the inclusive end date from `WEATHER_START_DATE` and
+`WEATHER_DAYS`. A 180-day range produces approximately 4,320 hourly weather
+records. The electricity-price source must cover the same dates for the joined
+analytics table to contain the full range.
 
 Every developer creates their local file once:
 
