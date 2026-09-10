@@ -317,7 +317,7 @@ Good first tests:
 8. Run the full pipeline.
 
 ```bash
-python -m src.run_pipeline
+python -m weather_energy.run_pipeline
 ```
 
 9. Verify table contents with a SQL client or `psql`.
