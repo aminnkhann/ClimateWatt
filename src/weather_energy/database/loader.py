@@ -1,6 +1,7 @@
 """Idempotent PostgreSQL loading helpers."""
 
 from collections.abc import Iterable
+from importlib import resources
 
 import pandas as pd
 
@@ -8,10 +9,8 @@ from weather_energy.clients.weather_client import validate_weather
 
 
 def initialize_database(connection) -> None:
-    """Create database objects from the checked-in SQL schema."""
-    from pathlib import Path
-
-    schema = Path(__file__).resolve().parents[3] / "sql" / "create_tables.sql"
+    """Create database objects from the packaged SQL schema."""
+    schema = resources.files("weather_energy.database").joinpath("create_tables.sql")
     with connection.cursor() as cursor:
         cursor.execute(schema.read_text())
     connection.commit()
