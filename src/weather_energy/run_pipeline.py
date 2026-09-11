@@ -3,6 +3,8 @@
 import logging
 from datetime import timedelta
 
+import pandas as pd
+
 from weather_energy.clients.price_client import prepare_prices, read_price_csv
 from weather_energy.clients.weather_client import fetch_weather
 from weather_energy.config import get_settings
@@ -32,6 +34,7 @@ def run() -> None:
         longitude=settings.longitude,
     )
     prices = prepare_prices(read_price_csv(settings.prices_csv))
+    prices["timestamp_utc"] = pd.to_datetime(prices["timestamp_utc"], utc=True, errors="coerce")
     weather_start = weather["timestamp_utc"].min()
     weather_end = weather["timestamp_utc"].max()
     price_start = prices["timestamp_utc"].min()

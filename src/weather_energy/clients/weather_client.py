@@ -90,7 +90,12 @@ def fetch_weather(
 
     weather = pd.DataFrame(
         {
-            "timestamp_utc": pd.to_datetime(hourly["time"], utc=True, errors="raise"),
+            "timestamp_utc": pd.to_datetime(
+                hourly["time"],
+                format="%Y-%m-%dT%H:%M",
+                utc=True,
+                errors="raise",
+            ),
             "city": city,
             "temperature_c": hourly["temperature_2m"],
             "relative_humidity_percent": hourly["relative_humidity_2m"],
