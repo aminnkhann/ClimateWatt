@@ -14,17 +14,8 @@ import pandas as pd
 from weather_energy.config import get_settings
 from weather_energy.transform.weather_energy import build_hourly_dataset
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-
 REQUIRED_WEATHER_COLUMNS = {"timestamp_utc", "city", "temperature_c"}
 REQUIRED_PRICE_COLUMNS = {"timestamp_utc", "market_area", "electricity_price_eur_mwh"}
-FINAL_COLUMNS = [
-    "timestamp_utc",
-    "city",
-    "market_area",
-    "temperature_c",
-    "electricity_price_eur_mwh",
-]
 
 
 def load_weather(path: Path) -> pd.DataFrame:
