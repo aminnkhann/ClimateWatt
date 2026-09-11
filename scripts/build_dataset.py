@@ -12,6 +12,7 @@ from pathlib import Path
 import pandas as pd
 
 from weather_energy.config import get_settings
+from weather_energy.transform.weather_energy import build_hourly_dataset
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -64,24 +65,7 @@ def load_prices(path: Path) -> pd.DataFrame:
 
 def build_dataset(weather: pd.DataFrame, prices: pd.DataFrame) -> pd.DataFrame:
     """Join weather and price data on UTC timestamps and keep the final columns."""
-    if weather.duplicated(subset=["timestamp_utc", "city"]).any():
-        raise ValueError("Weather data contains duplicate timestamp_utc and city values")
-    if prices.duplicated(subset=["timestamp_utc", "market_area"]).any():
-        raise ValueError("Price data contains duplicate timestamp_utc and market_area values")
-
-    merged = weather.merge(prices, on="timestamp_utc", how="inner", validate="one_to_one")
-    if merged.empty:
-        raise ValueError("Weather and price data have no shared timestamp_utc values")
-
-    merged = merged.loc[:, FINAL_COLUMNS].copy()
-    merged = merged.dropna(subset=FINAL_COLUMNS)
-    merged = merged.sort_values("timestamp_utc").drop_duplicates(subset=["timestamp_utc"])
-    if merged["timestamp_utc"].duplicated().any():
-        raise ValueError("Final dataset contains duplicate timestamp_utc values")
-    merged["timestamp_utc"] = pd.to_datetime(merged["timestamp_utc"], utc=True).dt.strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
-    return merged
+    return build_hourly_dataset(weather, prices)
 
 
 def main() -> None:

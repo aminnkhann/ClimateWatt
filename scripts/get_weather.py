@@ -26,7 +26,6 @@ def iso_date(value: str) -> date:
 def parse_args() -> argparse.Namespace:
     """Read location and date-range values from the command line."""
     settings = get_settings()
-    default_end_date = settings.weather_start_date + timedelta(days=settings.weather_days - 1)
     parser = argparse.ArgumentParser(
         description="Download hourly weather data from Open-Meteo."
     )
@@ -34,14 +33,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--latitude", type=float, default=settings.latitude)
     parser.add_argument("--longitude", type=float, default=settings.longitude)
     parser.add_argument("--start-date", type=iso_date, default=settings.weather_start_date)
-    parser.add_argument("--end-date", type=iso_date, default=default_end_date)
+    parser.add_argument("--end-date", type=iso_date)
     parser.add_argument(
         "--output-dir",
         type=Path,
         default=settings.output_dir,
         help="Directory where weather.csv will be written",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.end_date is None:
+        args.end_date = args.start_date + timedelta(days=settings.weather_days - 1)
+    return args
 
 
 def validate_args(args: argparse.Namespace) -> None:

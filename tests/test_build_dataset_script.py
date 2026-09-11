@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
 from scripts import build_dataset
 
@@ -64,3 +65,54 @@ def test_loaders_keep_mixed_valid_timestamp_formats(tmp_path):
         "2025-01-01T00:00:00Z",
         "2025-01-01T01:00:00Z",
     ]
+
+
+def test_build_dataset_allows_multiple_market_areas_for_one_hour():
+    weather = pd.DataFrame(
+        {
+            "timestamp_utc": ["2025-01-01T00:00:00Z"],
+            "city": ["Hamburg"],
+            "temperature_c": [4.5],
+        }
+    )
+    prices = pd.DataFrame(
+        {
+            "timestamp_utc": ["2025-01-01T00:00:00Z", "2025-01-01T00:00:00Z"],
+            "market_area": ["DE-LU", "FR"],
+            "electricity_price_eur_mwh": [75.0, 80.0],
+        }
+    )
+
+    result = build_dataset.build_dataset(weather, prices)
+
+    assert result[["timestamp_utc", "market_area"]].values.tolist() == [
+        ["2025-01-01T00:00:00Z", "DE-LU"],
+        ["2025-01-01T00:00:00Z", "FR"],
+    ]
+
+
+@pytest.mark.parametrize(
+    ("city", "temperature"),
+    [
+        ("   ", 4.5),
+        ("Hamburg", float("inf")),
+    ],
+)
+def test_build_dataset_rejects_invalid_weather_values(city, temperature):
+    weather = pd.DataFrame(
+        {
+            "timestamp_utc": ["2025-01-01T00:00:00Z"],
+            "city": [city],
+            "temperature_c": [temperature],
+        }
+    )
+    prices = pd.DataFrame(
+        {
+            "timestamp_utc": ["2025-01-01T00:00:00Z"],
+            "market_area": ["DE-LU"],
+            "electricity_price_eur_mwh": [75.0],
+        }
+    )
+
+    with pytest.raises(ValueError, match="no shared timestamp_utc"):
+        build_dataset.build_dataset(weather, prices)

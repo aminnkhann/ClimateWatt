@@ -34,6 +34,27 @@ def test_parse_args_uses_configured_city_range_and_output_dir(tmp_path, monkeypa
     assert args.output_dir == output_dir
 
 
+def test_parse_args_recalculates_end_date_from_overridden_start_date(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        get_weather,
+        "get_settings",
+        lambda: SimpleNamespace(
+            city="Berlin",
+            latitude=52.52,
+            longitude=13.405,
+            weather_start_date=date(2025, 1, 1),
+            weather_days=180,
+            output_dir=tmp_path,
+        ),
+    )
+    monkeypatch.setattr("sys.argv", ["get_weather.py", "--start-date", "2026-01-01"])
+
+    args = get_weather.parse_args()
+
+    assert args.start_date == date(2026, 1, 1)
+    assert args.end_date == date(2026, 6, 29)
+
+
 def test_main_writes_weather_to_configured_output_dir(tmp_path, monkeypatch):
     output_dir = tmp_path / "configured"
     monkeypatch.setattr(
