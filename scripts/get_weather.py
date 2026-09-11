@@ -1,17 +1,16 @@
-"""Download hourly Open-Meteo weather data to ``data/output/weather.csv``."""
+"""Download hourly Open-Meteo weather data to the configured output directory."""
 
 from __future__ import annotations
 
 import argparse
 import logging
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import requests
 
 from weather_energy.clients.weather_client import fetch_weather
-
-OUTPUT_PATH = Path(__file__).resolve().parents[1] / "data" / "output" / "weather.csv"
+from weather_energy.config import get_settings
 
 
 def iso_date(value: str) -> date:
@@ -26,14 +25,22 @@ def iso_date(value: str) -> date:
 
 def parse_args() -> argparse.Namespace:
     """Read location and date-range values from the command line."""
+    settings = get_settings()
+    default_end_date = settings.weather_start_date + timedelta(days=settings.weather_days - 1)
     parser = argparse.ArgumentParser(
         description="Download hourly weather data from Open-Meteo."
     )
-    parser.add_argument("--city", default="Hamburg", help="Name stored in the output CSV")
-    parser.add_argument("--latitude", type=float, default=53.5511)
-    parser.add_argument("--longitude", type=float, default=9.9937)
-    parser.add_argument("--start-date", type=iso_date, default=date(2025, 1, 1))
-    parser.add_argument("--end-date", type=iso_date, default=date(2025, 1, 7))
+    parser.add_argument("--city", default=settings.city, help="Name stored in the output CSV")
+    parser.add_argument("--latitude", type=float, default=settings.latitude)
+    parser.add_argument("--longitude", type=float, default=settings.longitude)
+    parser.add_argument("--start-date", type=iso_date, default=settings.weather_start_date)
+    parser.add_argument("--end-date", type=iso_date, default=default_end_date)
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=settings.output_dir,
+        help="Directory where weather.csv will be written",
+    )
     return parser.parse_args()
 
 
@@ -63,13 +70,14 @@ def main() -> None:
             start_date=args.start_date,
             end_date=args.end_date,
         )
-        OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        output_path = args.output_dir / "weather.csv"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         weather["timestamp_utc"] = weather["timestamp_utc"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-        weather.to_csv(OUTPUT_PATH, index=False)
+        weather.to_csv(output_path, index=False)
     except (ValueError, requests.RequestException) as error:
         raise SystemExit(f"Weather download failed: {error}") from error
 
-    print(f"Wrote {len(weather)} hourly weather rows to {OUTPUT_PATH}")
+    print(f"Wrote {len(weather)} hourly weather rows to {output_path}")
 
 
 if __name__ == "__main__":

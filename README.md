@@ -149,10 +149,10 @@ source .venv/bin/activate      # Linux/macOS
 # .venv\Scripts\activate       # Windows PowerShell
 ```
 
-2. Install the first dependencies.
+2. Install the project and first dependencies.
 
 ```bash
-pip install pandas requests
+pip install -e ".[dev]"
 pip freeze > requirements.txt
 ```
 
@@ -607,9 +607,9 @@ pytest
 ruff check .
 ```
 
-For the teammate integrating PostgreSQL, apply `sql/create_tables.sql` to the
-configured database first. It currently creates only `raw.weather_hourly`.
-Then use the weather functions inside a caller-managed transaction:
+For lower-level database work, use the weather functions inside a
+caller-managed transaction. The normal `python -m weather_energy.run_pipeline`
+entry point initializes all raw and analytics tables before loading data.
 
 ```python
 import os
@@ -631,6 +631,6 @@ validates again before SQL and uses `ON CONFLICT (timestamp_utc, city) DO UPDATE
 so existing hours are updated rather than inserted twice.
 
 This completes the weather component's implementation. Shared Docker setup,
-price/analytics database tables, and the full Level 2 pipeline entry point still
-need team integration. Unit tests mock HTTP and database connections; they do
-not establish that a live API request or PostgreSQL deployment works.
+raw and analytics database tables, and the full Level 2 pipeline entry point are
+implemented. Unit tests mock HTTP and database connections; they do not
+establish that a live API request or PostgreSQL deployment works.

@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from urllib.parse import quote_plus
+from urllib.parse import quote
 
 from dotenv import load_dotenv
 
@@ -62,8 +62,8 @@ def _database_url() -> str:
     port = _env("POSTGRES_PORT", "5442")
     database = _env("POSTGRES_DB", "weather_energy")
     return (
-        f"postgresql://{quote_plus(user)}:{quote_plus(password)}"
-        f"@{host}:{port}/{quote_plus(database)}"
+        f"postgresql://{quote(user, safe='')}:{quote(password, safe='')}"
+        f"@{host}:{port}/{quote(database, safe='')}"
     )
 
 @dataclass(frozen=True)

@@ -11,11 +11,9 @@ from pathlib import Path
 
 import pandas as pd
 
+from weather_energy.config import get_settings
+
 BASE_DIR = Path(__file__).resolve().parent.parent
-OUTPUT_DIR = BASE_DIR / "data" / "output"
-WEATHER_PATH = OUTPUT_DIR / "weather.csv"
-PRICES_PATH = OUTPUT_DIR / "prices.csv"
-FINAL_PATH = OUTPUT_DIR / "weather_energy_hourly.csv"
 
 REQUIRED_WEATHER_COLUMNS = {"timestamp_utc", "city", "temperature_c"}
 REQUIRED_PRICE_COLUMNS = {"timestamp_utc", "market_area", "electricity_price_eur_mwh"}
@@ -37,7 +35,9 @@ def load_weather(path: Path) -> pd.DataFrame:
     if missing:
         raise ValueError(f"Weather file is missing required columns: {sorted(missing)}")
 
-    weather["timestamp_utc"] = pd.to_datetime(weather["timestamp_utc"], utc=True, errors="coerce")
+    weather["timestamp_utc"] = pd.to_datetime(
+        weather["timestamp_utc"], utc=True, errors="coerce", format="mixed"
+    )
     weather["temperature_c"] = pd.to_numeric(weather["temperature_c"], errors="coerce")
     weather = weather.dropna(subset=["timestamp_utc", "city", "temperature_c"])
     return weather
@@ -52,7 +52,9 @@ def load_prices(path: Path) -> pd.DataFrame:
     if missing:
         raise ValueError(f"Price file is missing required columns: {sorted(missing)}")
 
-    prices["timestamp_utc"] = pd.to_datetime(prices["timestamp_utc"], utc=True, errors="coerce")
+    prices["timestamp_utc"] = pd.to_datetime(
+        prices["timestamp_utc"], utc=True, errors="coerce", format="mixed"
+    )
     prices["electricity_price_eur_mwh"] = pd.to_numeric(
         prices["electricity_price_eur_mwh"], errors="coerce"
     )
@@ -83,14 +85,19 @@ def build_dataset(weather: pd.DataFrame, prices: pd.DataFrame) -> pd.DataFrame:
 
 
 def main() -> None:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_dir = get_settings().output_dir
+    weather_path = output_dir / "weather.csv"
+    prices_path = output_dir / "prices.csv"
+    final_path = output_dir / "weather_energy_hourly.csv"
 
-    weather = load_weather(WEATHER_PATH)
-    prices = load_prices(PRICES_PATH)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    weather = load_weather(weather_path)
+    prices = load_prices(prices_path)
     final_dataset = build_dataset(weather, prices)
 
-    final_dataset.to_csv(FINAL_PATH, index=False)
-    print(f"Wrote {len(final_dataset)} rows to {FINAL_PATH}")
+    final_dataset.to_csv(final_path, index=False)
+    print(f"Wrote {len(final_dataset)} rows to {final_path}")
 
 
 if __name__ == "__main__":
