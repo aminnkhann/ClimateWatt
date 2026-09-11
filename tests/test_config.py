@@ -1,6 +1,7 @@
 """Tests for environment-driven pipeline configuration."""
 
 from datetime import date
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -36,3 +37,15 @@ def test_get_settings_rejects_invalid_weather_start_date(monkeypatch):
 
     with pytest.raises(ValueError, match="WEATHER_START_DATE must use YYYY-MM-DD"):
         get_settings()
+
+
+def test_database_url_percent_encodes_spaces_in_password(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("POSTGRES_USER", "weather_user")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "a b")
+
+    settings = get_settings()
+
+    assert "a%20b" in settings.database_url
+    assert "a+b" not in settings.database_url
+    assert urlsplit(settings.database_url).password == "a%20b"

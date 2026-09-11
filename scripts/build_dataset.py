@@ -35,7 +35,9 @@ def load_weather(path: Path) -> pd.DataFrame:
     if missing:
         raise ValueError(f"Weather file is missing required columns: {sorted(missing)}")
 
-    weather["timestamp_utc"] = pd.to_datetime(weather["timestamp_utc"], utc=True, errors="coerce")
+    weather["timestamp_utc"] = pd.to_datetime(
+        weather["timestamp_utc"], utc=True, errors="coerce", format="mixed"
+    )
     weather["temperature_c"] = pd.to_numeric(weather["temperature_c"], errors="coerce")
     weather = weather.dropna(subset=["timestamp_utc", "city", "temperature_c"])
     return weather
@@ -50,7 +52,9 @@ def load_prices(path: Path) -> pd.DataFrame:
     if missing:
         raise ValueError(f"Price file is missing required columns: {sorted(missing)}")
 
-    prices["timestamp_utc"] = pd.to_datetime(prices["timestamp_utc"], utc=True, errors="coerce")
+    prices["timestamp_utc"] = pd.to_datetime(
+        prices["timestamp_utc"], utc=True, errors="coerce", format="mixed"
+    )
     prices["electricity_price_eur_mwh"] = pd.to_numeric(
         prices["electricity_price_eur_mwh"], errors="coerce"
     )
