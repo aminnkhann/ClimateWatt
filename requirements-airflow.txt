@@ -1,4 +1,5 @@
-pandas>=2.2,<3.0
+# Airflow 2.10.5's bundled Google and Snowflake providers require pandas <2.2.
+pandas>=2.1.2,<2.2
 requests>=2.32,<3.0
 python-dotenv>=1.0,<2.0
 psycopg[binary]>=3.3.5
