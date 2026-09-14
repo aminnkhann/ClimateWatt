@@ -70,7 +70,21 @@ The pipeline is pre-configured to process data for Hamburg.
 
 This project uses Docker Compose for environment provisioning. Ensure Docker is installed on your host system.
 
-### 1. Initialize Infrastructure
+### 1. Create configuration files
+
+Create the local configuration files before starting any Compose service. The
+PostgreSQL container requires `POSTGRES_PASSWORD` during its first startup.
+
+```bash
+cp .env.example .env
+cp .env.city.example .env.city
+```
+
+Set a non-default `POSTGRES_PASSWORD` in `.env`. You can also set the city,
+coordinates, and weather date range in `.env.city`; Compose passes these values
+to every Airflow container.
+
+### 2. Initialize Infrastructure
 
 ```bash
 # Start PostgreSQL container
@@ -81,8 +95,13 @@ docker compose --profile airflow up airflow-init
 docker compose --profile airflow up -d airflow-webserver airflow-scheduler
 ```
 
-### 2. Configuration
-Create `.env` and `.env.city` files in the repository root based on the provided examples. These files store database credentials, API endpoints, and location-specific parameters.
+### Price-data coverage
+
+`data/input/electricity_prices_sample.csv` is a complete **hourly** development
+sample for 2025-01-01. Trigger the demo DAG for that UTC day, or replace/mount
+`PRICES_CSV` with a complete hourly or 15-minute CSV that covers every requested
+Airflow data interval. A static sample cannot provide market prices for future
+scheduled runs.
 
 ---
 

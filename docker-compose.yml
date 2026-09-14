@@ -25,10 +25,12 @@ services:
     environment: &airflow-env
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-weather_user}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-weather_energy}
+      # Build this URL inside the container so credentials with @, :, /, or
+      # other reserved URL characters are encoded safely.
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN_CMD: >-
+        python -c "import os; from urllib.parse import quote; print('postgresql+psycopg2://{}:{}@postgres:5432/{}'.format(quote(os.environ['POSTGRES_USER'], safe=''), quote(os.environ['POSTGRES_PASSWORD'], safe=''), quote(os.environ['POSTGRES_DB'], safe='')))"
       AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_WEBSERVER_SECRET_KEY:-local-dev-secret}
       AIRFLOW_STAGING_DIR: /tmp/weather-energy-staging
-      DATABASE_URL: postgresql://${POSTGRES_USER:-weather_user}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-weather_energy}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-weather_energy}
@@ -37,6 +39,8 @@ services:
       PRICES_CSV: /opt/airflow/data/input/electricity_prices_sample.csv
       PYTHONPATH: /opt/airflow/src
       _PIP_ADDITIONAL_REQUIREMENTS: -r /opt/airflow/requirements-airflow.txt
+    env_file: &airflow-city-env
+      - .env.city
     volumes: &airflow-volumes
       - ./dags:/opt/airflow/dags:ro
       - ./src:/opt/airflow/src:ro
@@ -45,11 +49,11 @@ services:
       - ./requirements-airflow.txt:/opt/airflow/requirements-airflow.txt:ro
     command: >
       bash -c "airflow db migrate &&
-      airflow users create
+      (airflow users create
       --username ${AIRFLOW_ADMIN_USER:-admin}
       --password ${AIRFLOW_ADMIN_PASSWORD:-admin}
       --firstname Local --lastname Admin --role Admin
-      --email admin@example.com || true"
+      --email admin@example.com || true)"
 
   airflow-webserver:
     image: apache/airflow:2.10.5-python3.12
@@ -58,6 +62,7 @@ services:
       airflow-init:
         condition: service_completed_successfully
     environment: *airflow-env
+    env_file: *airflow-city-env
     volumes: *airflow-volumes
     ports:
       - "${AIRFLOW_WEBSERVER_PORT:-8080}:8080"
@@ -75,6 +80,7 @@ services:
       airflow-init:
         condition: service_completed_successfully
     environment: *airflow-env
+    env_file: *airflow-city-env
     volumes: *airflow-volumes
     command: scheduler
 

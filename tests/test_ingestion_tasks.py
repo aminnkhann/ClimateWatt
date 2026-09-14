@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 from datetime import date
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -80,6 +81,18 @@ def test_negative_prices_and_period_filtering(tmp_path, prices):
     result = pd.read_csv(artifact)
     assert len(result) == 2
     assert result.electricity_price_eur_mwh.tolist() == [-5.0, -5.0]
+
+
+def test_committed_price_sample_covers_a_complete_demo_day(tmp_path):
+    sample = Path(__file__).parents[1] / "data/input/electricity_prices_sample.csv"
+
+    artifact = tasks.fetch_prices_task(START, END, tmp_path, prices_csv=sample)
+
+    result = pd.read_csv(artifact)
+    assert len(result) == 24
+    timestamps = pd.to_datetime(result.timestamp_utc, utc=True)
+    assert timestamps.iloc[0] == pd.Timestamp(START)
+    assert timestamps.iloc[-1] == pd.Timestamp("2025-01-01T23:00:00Z")
 
 
 @pytest.mark.parametrize("problem", ["timestamp", "gap", "duplicate", "value"])
