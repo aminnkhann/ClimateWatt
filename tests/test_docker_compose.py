@@ -11,6 +11,7 @@ def test_airflow_compose_configuration_handles_city_settings_and_database_urls()
     assert "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN_CMD" in compose
     assert "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN:" not in compose
     assert "DATABASE_URL:" not in compose
+    assert "end=''" in compose
 
 
 def test_airflow_migration_failure_is_not_masked_by_user_creation():

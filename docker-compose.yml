@@ -28,7 +28,7 @@ services:
       # Build this URL inside the container so credentials with @, :, /, or
       # other reserved URL characters are encoded safely.
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN_CMD: >-
-        python -c "import os; from urllib.parse import quote; print('postgresql+psycopg2://{}:{}@postgres:5432/{}'.format(quote(os.environ['POSTGRES_USER'], safe=''), quote(os.environ['POSTGRES_PASSWORD'], safe=''), quote(os.environ['POSTGRES_DB'], safe='')))"
+        python -c "import os; from urllib.parse import quote; print('postgresql+psycopg2://{}:{}@postgres:5432/{}'.format(quote(os.environ['POSTGRES_USER'], safe=''), quote(os.environ['POSTGRES_PASSWORD'], safe=''), quote(os.environ['POSTGRES_DB'], safe='')), end='')"
       AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_WEBSERVER_SECRET_KEY:-local-dev-secret}
       AIRFLOW_STAGING_DIR: /tmp/weather-energy-staging
       POSTGRES_HOST: postgres
