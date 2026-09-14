@@ -296,3 +296,50 @@ def test_database_errors_propagate(monkeypatch, tmp_path, weather, prices, sourc
     assert caught.value is error
     assert transaction_errors == ([error] if failure_at == "write" else [])
     assert "Loaded " not in caplog.text
+
+
+@pytest.mark.parametrize("extra_rows", [
+    [("bad timestamp", "FR", "bad price")],
+    [(START, "", "bad price"), (START, None, "bad price")],
+    [(START, "FR", 1), (START, "FR", 2)],
+    [("2024-12-31T23:00:00Z", "DE-LU", "bad price")],
+    [("2025-01-01T01:00:00Z", "DE-LU", "bad price")],
+    [("2025-01-02T00:00:00Z", "DE-LU", 1),
+     ("2025-01-02T00:00:00Z", "DE-LU", 2)],
+])
+def test_prices_ignore_invalid_rows_outside_business_slice(tmp_path, extra_rows):
+    path = tmp_path / "input.csv"
+    pd.DataFrame(
+        [(START, "DE-LU", -5), *extra_rows],
+        columns=["timestamp_utc", "market_area", "electricity_price_eur_mwh"],
+    ).to_csv(path, index=False)
+    artifact = tasks.fetch_prices_task(
+        START, "2025-01-01T01:00:00Z", tmp_path, prices_csv=path,
+    )
+    result = pd.read_csv(artifact)
+    assert result.market_area.tolist() == ["DE-LU"]
+    assert result.electricity_price_eur_mwh.tolist() == [-5.0]
+    assert pd.to_datetime(result.timestamp_utc, utc=True).tolist() == [pd.Timestamp(START)]
+
+
+def test_requested_market_unknown_timestamp_fails_even_with_complete_slice(tmp_path):
+    path = tmp_path / "input.csv"
+    pd.DataFrame({
+        "timestamp_utc": [START, "unknown"], "market_area": ["DE-LU", "DE-LU"],
+        "electricity_price_eur_mwh": [10, 20],
+    }).to_csv(path, index=False)
+    with pytest.raises(ValueError, match="cannot determine interval"):
+        tasks.fetch_prices_task(START, "2025-01-01T01:00:00Z", tmp_path, prices_csv=path)
+    assert not list(tmp_path.glob("prices-*.csv"))
+
+
+def test_price_slice_preserves_second_autumn_hour(tmp_path):
+    path = tmp_path / "input.csv"
+    pd.DataFrame({
+        "timestamp_utc": ["2025-10-26 02:00", "2025-10-26 02:00"],
+        "market_area": ["DE-LU", "DE-LU"], "electricity_price_eur_mwh": [10, 20],
+    }).to_csv(path, index=False)
+    artifact = tasks.fetch_prices_task(
+        "2025-10-26T01:00:00Z", "2025-10-26T02:00:00Z", tmp_path, prices_csv=path,
+    )
+    assert pd.read_csv(artifact).electricity_price_eur_mwh.tolist() == [20.0]

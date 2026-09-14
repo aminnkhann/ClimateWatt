@@ -99,7 +99,11 @@ def _validate_prices(prices):
 
 
 def fetch_prices_task(start, end, staging_dir, *, prices_csv, market_area="DE-LU"):
-    """Stage hourly prices, rejecting invalid source rows before aggregation."""
+    """Stage the requested market/window, validating its rows before aggregation.
+
+    Unparseable timestamps in the requested market fail because their window
+    cannot be determined. Rows belonging to other markets are ignored entirely.
+    """
     market_area = market_area.strip()
     if not market_area:
         raise ValueError("Market area must not be empty")
@@ -108,19 +112,20 @@ def fetch_prices_task(start, end, staging_dir, *, prices_csv, market_area="DE-LU
     validate_columns(raw)
     raw = raw.copy()
     raw["market_area"] = raw["market_area"].astype("string").str.strip()
-    if raw["market_area"].isna().any() or raw["market_area"].eq("").any():
-        raise ValueError("Missing market area")
+    raw = raw.loc[raw["market_area"].eq(market_area)].copy()
     timestamps = parse_timestamp_series(raw["timestamp_utc"], raw["market_area"])
     if timestamps.isna().any():
-        raise ValueError("Invalid price timestamps")
+        raise ValueError("Invalid price timestamps in requested market; cannot determine interval")
+    # Resolve local/DST timestamps once, preserving source order, then narrow
+    # the window before validating prices or duplicate business keys.
+    raw["timestamp_utc"] = timestamps
+    raw = raw.loc[timestamps.ge(start) & timestamps.lt(end)].copy()
     values = pd.to_numeric(raw["electricity_price_eur_mwh"].map(normalize_price), errors="coerce")
     if not values.map(math.isfinite).all():
         raise ValueError("Invalid electricity price values")
-    if raw.assign(timestamp_utc=timestamps).duplicated(["timestamp_utc", "market_area"]).any():
+    if raw.duplicated(["timestamp_utc", "market_area"]).any():
         raise ValueError("Duplicate source price business keys")
-    selected = timestamps.loc[
-        raw["market_area"].eq(market_area) & timestamps.ge(start) & timestamps.lt(end)
-    ].sort_values()
+    selected = raw["timestamp_utc"].sort_values()
     # Any sub-hourly row identifies quarter-hour input for this interval.
     # Validate before aggregation, which would otherwise hide missing quarters.
     if (selected != selected.dt.floor("h")).any():
