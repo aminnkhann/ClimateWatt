@@ -256,9 +256,8 @@ docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -
 
 ## Local Airflow walkthrough screenshots
 
-The screenshots below are intentionally local-only assets in `data/screenshots/`.
-They are ignored by Git, so they help in this checkout but are not published with
-the repository or available to a fresh clone.
+The screenshots below are stored in `data/screenshots/` and tracked with the
+repository so they are visible both locally and on GitHub.
 
 ![Airflow dashboard](data/screenshots/Screenshot%20from%202026-09-14%2014-30-53.png)
 

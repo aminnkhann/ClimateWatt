@@ -23,8 +23,7 @@ htmlcov/
 data/output/*
 !data/output/.gitkeep
 
-# Local walkthrough screenshots and notes
-data/screenshots/
+# Local walkthrough notes
 docs/*
 !docs/.gitkeep
 
