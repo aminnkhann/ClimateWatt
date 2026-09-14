@@ -16,5 +16,67 @@ services:
       timeout: 5s
       retries: 10
 
+  airflow-init:
+    image: apache/airflow:2.10.5-python3.12
+    profiles: ["airflow"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: &airflow-env
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-weather_user}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-weather_energy}
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_WEBSERVER_SECRET_KEY:-local-dev-secret}
+      AIRFLOW_STAGING_DIR: /tmp/weather-energy-staging
+      DATABASE_URL: postgresql://${POSTGRES_USER:-weather_user}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-weather_energy}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-weather_energy}
+      POSTGRES_USER: ${POSTGRES_USER:-weather_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      PRICES_CSV: /opt/airflow/data/input/electricity_prices_sample.csv
+      PYTHONPATH: /opt/airflow/src
+      _PIP_ADDITIONAL_REQUIREMENTS: -r /opt/airflow/requirements-airflow.txt
+    volumes: &airflow-volumes
+      - ./dags:/opt/airflow/dags:ro
+      - ./src:/opt/airflow/src:ro
+      - ./data:/opt/airflow/data
+      - ./sql:/opt/airflow/sql:ro
+      - ./requirements-airflow.txt:/opt/airflow/requirements-airflow.txt:ro
+    command: >
+      bash -c "airflow db migrate &&
+      airflow users create
+      --username ${AIRFLOW_ADMIN_USER:-admin}
+      --password ${AIRFLOW_ADMIN_PASSWORD:-admin}
+      --firstname Local --lastname Admin --role Admin
+      --email admin@example.com || true"
+
+  airflow-webserver:
+    image: apache/airflow:2.10.5-python3.12
+    profiles: ["airflow"]
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment: *airflow-env
+    volumes: *airflow-volumes
+    ports:
+      - "${AIRFLOW_WEBSERVER_PORT:-8080}:8080"
+    command: webserver
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type LocalTaskJob --hostname \"$${HOSTNAME}\" || airflow db check"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  airflow-scheduler:
+    image: apache/airflow:2.10.5-python3.12
+    profiles: ["airflow"]
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment: *airflow-env
+    volumes: *airflow-volumes
+    command: scheduler
+
 volumes:
   postgres_data:

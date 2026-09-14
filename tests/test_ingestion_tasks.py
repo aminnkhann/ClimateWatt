@@ -343,3 +343,82 @@ def test_price_slice_preserves_second_autumn_hour(tmp_path):
         "2025-10-26T01:00:00Z", "2025-10-26T02:00:00Z", tmp_path, prices_csv=path,
     )
     assert pd.read_csv(artifact).electricity_price_eur_mwh.tolist() == [20.0]
+
+
+class _AnalyticsCursor:
+    def __init__(self, connection):
+        self.connection = connection
+        self.rows = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return None
+
+    def execute(self, statement, params=None):
+        self.connection.statements.append((statement, params))
+        if "FROM raw.weather_hourly" in statement:
+            self.rows = self.connection.weather_rows
+        elif "FROM raw.electricity_price_hourly" in statement:
+            self.rows = self.connection.price_rows
+        elif "FROM analytics.weather_energy_hourly" in statement:
+            self.rows = self.connection.analytics_rows
+        else:
+            self.rows = []
+
+    def executemany(self, statement, rows):
+        self.connection.statements.append((statement, list(rows)))
+
+    def fetchall(self):
+        return self.rows
+
+
+class _AnalyticsConnection:
+    def __init__(self, weather_rows, price_rows, analytics_rows=None):
+        self.weather_rows = weather_rows
+        self.price_rows = price_rows
+        self.analytics_rows = analytics_rows or []
+        self.statements = []
+        self.commits = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return None
+
+    def cursor(self):
+        return _AnalyticsCursor(self)
+
+    def commit(self):
+        self.commits += 1
+
+
+def test_build_analytics_task_reads_raw_slice_and_loads(monkeypatch):
+    weather_rows = [(
+        pd.Timestamp(START), "Hamburg", 4.0, 80.0, 10.0, 50.0,
+    )]
+    price_rows = [(pd.Timestamp(START), "DE-LU", -5.0)]
+    connection = _AnalyticsConnection(weather_rows, price_rows)
+
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _url: connection)
+
+    assert tasks.build_analytics_task(
+        START, "2025-01-01T01:00:00Z", database_url="postgresql://secret",
+    ) == 1
+    assert any(
+        "analytics.weather_energy_hourly" in statement for statement, _ in connection.statements
+    )
+    assert connection.commits == 1
+
+
+def test_validate_analytics_task_rejects_incomplete_slice(monkeypatch):
+    connection = _AnalyticsConnection([], [], analytics_rows=[])
+
+    monkeypatch.setattr(tasks.psycopg, "connect", lambda _url: connection)
+
+    with pytest.raises(ValueError, match="Incomplete hourly coverage"):
+        tasks.validate_analytics_task(
+            START, "2025-01-01T01:00:00Z", database_url="postgresql://secret",
+        )

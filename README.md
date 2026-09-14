@@ -464,33 +464,55 @@ loading, and retries should be limited to transient API or database failures.
 
 1. Keep the Level 2 pipeline working before adding Airflow.
 
-2. Add Airflow services to `docker-compose.yml` using an official Airflow Docker Compose example as the starting point. Mount these folders into the Airflow containers:
+2. Start Postgres plus the Airflow services from the `airflow` Compose profile.
+
+```bash
+docker compose --profile airflow up airflow-init
+docker compose --profile airflow up -d postgres airflow-webserver airflow-scheduler
+```
+
+The Airflow services mount these project folders:
 
 ```text
 ./dags
 ./src
+./data
 ./sql
 ```
 
-3. Create `dags/weather_energy_daily.py`.
+3. Open Airflow at `http://localhost:8080`.
 
-The DAG should import functions from `src/`. Do not duplicate API and transformation code in the DAG.
+By default, the local admin login is `admin` / `admin`. Override
+`AIRFLOW_ADMIN_USER`, `AIRFLOW_ADMIN_PASSWORD`, or `AIRFLOW_WEBSERVER_PORT` in
+`.env` if your machine needs different values.
 
-4. Start the services.
+4. Confirm that the `weather_energy_daily` DAG appears without import errors.
 
-```bash
-docker compose up -d
+5. Trigger `weather_energy_daily` manually.
+
+6. Read task logs in the Airflow UI. Fix failures before turning the DAG on.
+
+7. Turn the DAG on only after manual runs work.
+
+The DAG imports functions from `src/`. It does not duplicate API, transformation,
+or SQL-loading code in the DAG file.
+
+### Local Airflow defaults
+
+The DAG processes Airflow's daily data interval in UTC. Inside the scheduler
+container, it stages fetched CSV artifacts in:
+
+```text
+/tmp/weather-energy-staging
 ```
 
-5. Open Airflow at `http://localhost:8080` and log in with the local credentials defined in your Compose configuration.
+Inside Docker, the pipeline uses:
 
-6. Confirm that the DAG appears without import errors.
-
-7. Trigger `weather_energy_daily` manually.
-
-8. Read task logs in the Airflow UI. Fix failures before adding more features.
-
-9. Turn the DAG on only after manual runs work.
+```text
+DATABASE_URL=postgresql://weather_user:<password>@postgres:5432/weather_energy
+PRICES_CSV=/opt/airflow/data/input/electricity_prices_sample.csv
+PYTHONPATH=/opt/airflow/src
+```
 
 ### Level 3 definition of done
 
@@ -504,10 +526,9 @@ docker compose up -d
 
 ### Level 3 implementation order
 
-1. Add Airflow services and health checks to a separate Compose profile.
-2. Add a minimal DAG that calls the existing pipeline once.
-3. Split the DAG into weather, price, load, transform, and validation tasks.
-4. Add retries, task timeouts, `catchup=False`, and a documented schedule.
+1. Airflow services and health checks live in a separate Compose profile.
+2. The DAG is split into weather, price, load, transform, and validation tasks.
+3. Retries, task timeouts, `catchup=False`, and the daily schedule are set in the DAG.
 5. Test a manual run, an intentional failure, and a repeated run.
 6. Add the successful-run screenshot and operating instructions to this README.
 

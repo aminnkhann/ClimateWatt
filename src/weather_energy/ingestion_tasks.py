@@ -21,7 +21,13 @@ from weather_energy.clients.price_client import (
     validate_columns,
 )
 from weather_energy.clients.weather_client import fetch_weather, validate_weather
-from weather_energy.database.loader import load_prices, load_weather
+from weather_energy.database.loader import (
+    initialize_database,
+    load_analytics,
+    load_prices,
+    load_weather,
+)
+from weather_energy.transform.weather_energy import build_hourly_dataset
 
 LOGGER = logging.getLogger(__name__)
 
@@ -163,3 +169,100 @@ def load_prices_raw_task(artifact, start, end, *, database_url, market_area="DE-
     LOGGER.info("Loaded prices market=%s start=%s end=%s rows=%d",
                 market_area, start, end, len(prices))
     return len(prices)
+
+
+def _read_raw_frame(connection, table, columns, start, end, key, value):
+    column_list = ", ".join(columns)
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT {column_list}
+            FROM {table}
+            WHERE {key} = %s AND timestamp_utc >= %s AND timestamp_utc < %s
+            ORDER BY timestamp_utc
+            """,
+            (value, start.to_pydatetime(), end.to_pydatetime()),
+        )
+        return pd.DataFrame(cursor.fetchall(), columns=columns)
+
+
+def build_analytics_task(start, end, *, database_url, city="Hamburg", market_area="DE-LU"):
+    """Join loaded raw rows for the interval and upsert analytics rows."""
+    city = city.strip()
+    market_area = market_area.strip()
+    if not city:
+        raise ValueError("City must not be empty")
+    if not market_area:
+        raise ValueError("Market area must not be empty")
+    start, end = _interval(start, end)
+    weather_columns = [
+        "timestamp_utc",
+        "city",
+        "temperature_c",
+        "relative_humidity_percent",
+        "wind_speed_kmh",
+        "cloud_cover_percent",
+    ]
+    price_columns = ["timestamp_utc", "market_area", "electricity_price_eur_mwh"]
+    with psycopg.connect(database_url) as connection:
+        initialize_database(connection)
+        weather = _read_raw_frame(
+            connection, "raw.weather_hourly", weather_columns, start, end, "city", city,
+        )
+        prices = _read_raw_frame(
+            connection,
+            "raw.electricity_price_hourly",
+            price_columns,
+            start,
+            end,
+            "market_area",
+            market_area,
+        )
+        weather = _coverage(validate_weather(weather), start, end, "city", city)
+        prices = _coverage(_validate_prices(prices), start, end, "market_area", market_area)
+        dataset = build_hourly_dataset(weather, prices)
+        load_analytics(connection, dataset)
+    LOGGER.info("Loaded analytics city=%s market=%s start=%s end=%s rows=%d",
+                city, market_area, start, end, len(dataset))
+    return len(dataset)
+
+
+def validate_analytics_task(start, end, *, database_url, city="Hamburg", market_area="DE-LU"):
+    """Fail if the analytics interval is incomplete or has duplicate business keys."""
+    city = city.strip()
+    market_area = market_area.strip()
+    if not city:
+        raise ValueError("City must not be empty")
+    if not market_area:
+        raise ValueError("Market area must not be empty")
+    start, end = _interval(start, end)
+    with psycopg.connect(database_url) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT timestamp_utc, city, market_area, temperature_c, electricity_price_eur_mwh
+                FROM analytics.weather_energy_hourly
+                WHERE city = %s AND market_area = %s
+                  AND timestamp_utc >= %s AND timestamp_utc < %s
+                ORDER BY timestamp_utc
+                """,
+                (city, market_area, start.to_pydatetime(), end.to_pydatetime()),
+            )
+            rows = cursor.fetchall()
+    dataset = pd.DataFrame(
+        rows,
+        columns=[
+            "timestamp_utc",
+            "city",
+            "market_area",
+            "temperature_c",
+            "electricity_price_eur_mwh",
+        ],
+    )
+    _coverage(dataset, start, end, "city", city)
+    _coverage(dataset, start, end, "market_area", market_area)
+    if dataset.duplicated(["timestamp_utc", "city", "market_area"]).any():
+        raise ValueError("Duplicate analytics business keys")
+    LOGGER.info("Validated analytics city=%s market=%s start=%s end=%s rows=%d",
+                city, market_area, start, end, len(dataset))
+    return len(dataset)
