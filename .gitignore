@@ -23,6 +23,11 @@ htmlcov/
 data/output/*
 !data/output/.gitkeep
 
+# Local walkthrough screenshots and notes
+data/screenshots/
+docs/*
+!docs/.gitkeep
+
 # Local review notes
 docs/pr_review_log.md
 
