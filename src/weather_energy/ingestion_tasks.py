@@ -77,6 +77,8 @@ def fetch_weather_task(start, end, staging_dir, *, city="Hamburg",
     """Fetch and stage complete weather; transient request errors propagate."""
     start, end = _interval(start, end)
     city = city.strip()
+    if not city:
+        raise ValueError("City must not be empty")
     weather = fetch_weather(
         start.date(), (end - pd.Timedelta(1, unit="h")).date(),
         city=city, latitude=latitude, longitude=longitude,
@@ -98,6 +100,9 @@ def _validate_prices(prices):
 
 def fetch_prices_task(start, end, staging_dir, *, prices_csv, market_area="DE-LU"):
     """Stage hourly prices, rejecting invalid source rows before aggregation."""
+    market_area = market_area.strip()
+    if not market_area:
+        raise ValueError("Market area must not be empty")
     start, end = _interval(start, end)
     raw = normalize_columns(read_price_csv(Path(prices_csv)))
     validate_columns(raw)
@@ -113,6 +118,15 @@ def fetch_prices_task(start, end, staging_dir, *, prices_csv, market_area="DE-LU
         raise ValueError("Invalid electricity price values")
     if raw.assign(timestamp_utc=timestamps).duplicated(["timestamp_utc", "market_area"]).any():
         raise ValueError("Duplicate source price business keys")
+    selected = timestamps.loc[
+        raw["market_area"].eq(market_area) & timestamps.ge(start) & timestamps.lt(end)
+    ].sort_values()
+    # Any sub-hourly row identifies quarter-hour input for this interval.
+    # Validate before aggregation, which would otherwise hide missing quarters.
+    if (selected != selected.dt.floor("h")).any():
+        expected = pd.date_range(start, end, freq="15min", inclusive="left")
+        if not pd.DatetimeIndex(selected).equals(expected):
+            raise ValueError("incomplete or misaligned 15-minute price data")
     prices = _coverage(_validate_prices(prepare_prices(raw)), start, end,
                        "market_area", market_area)
     return _write(prices, staging_dir, "prices-", start, end, market_area)
@@ -120,8 +134,11 @@ def fetch_prices_task(start, end, staging_dir, *, prices_csv, market_area="DE-LU
 
 def load_weather_raw_task(artifact, start, end, *, database_url, city="Hamburg"):
     """Validate staged weather and commit its upsert in one transaction."""
+    city = city.strip()
+    if not city:
+        raise ValueError("City must not be empty")
     start, end = _interval(start, end)
-    weather = _coverage(validate_weather(pd.read_csv(artifact)), start, end, "city", city.strip())
+    weather = _coverage(validate_weather(pd.read_csv(artifact)), start, end, "city", city)
     with psycopg.connect(database_url) as connection:
         load_weather(connection, weather)
     LOGGER.info("Loaded weather city=%s start=%s end=%s rows=%d", city, start, end, len(weather))
@@ -130,6 +147,9 @@ def load_weather_raw_task(artifact, start, end, *, database_url, city="Hamburg")
 
 def load_prices_raw_task(artifact, start, end, *, database_url, market_area="DE-LU"):
     """Validate staged prices and commit their upsert in one transaction."""
+    market_area = market_area.strip()
+    if not market_area:
+        raise ValueError("Market area must not be empty")
     start, end = _interval(start, end)
     prices = _coverage(_validate_prices(pd.read_csv(artifact)), start, end,
                        "market_area", market_area)
