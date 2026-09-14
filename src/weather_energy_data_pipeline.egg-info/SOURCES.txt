@@ -16,5 +16,10 @@ src/weather_energy_data_pipeline.egg-info/SOURCES.txt
 src/weather_energy_data_pipeline.egg-info/dependency_links.txt
 src/weather_energy_data_pipeline.egg-info/requires.txt
 src/weather_energy_data_pipeline.egg-info/top_level.txt
+tests/test_build_dataset_script.py
+tests/test_config.py
+tests/test_prepare_prices.py
+tests/test_price_client.py
+tests/test_run_pipeline.py
 tests/test_transform.py
 tests/test_weather_client.py
