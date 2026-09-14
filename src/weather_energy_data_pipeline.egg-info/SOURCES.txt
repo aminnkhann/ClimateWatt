@@ -3,11 +3,13 @@ README.md
 pyproject.toml
 src/weather_energy/__init__.py
 src/weather_energy/config.py
+src/weather_energy/ingestion_tasks.py
 src/weather_energy/run_pipeline.py
 src/weather_energy/clients/__init__.py
 src/weather_energy/clients/price_client.py
 src/weather_energy/clients/weather_client.py
 src/weather_energy/database/__init__.py
+src/weather_energy/database/create_tables.sql
 src/weather_energy/database/loader.py
 src/weather_energy/transform/__init__.py
 src/weather_energy/transform/weather_energy.py
@@ -16,8 +18,13 @@ src/weather_energy_data_pipeline.egg-info/SOURCES.txt
 src/weather_energy_data_pipeline.egg-info/dependency_links.txt
 src/weather_energy_data_pipeline.egg-info/requires.txt
 src/weather_energy_data_pipeline.egg-info/top_level.txt
+tests/test_airflow_dag.py
 tests/test_build_dataset_script.py
 tests/test_config.py
+tests/test_database_loader.py
+tests/test_docker_compose.py
+tests/test_get_weather_script.py
+tests/test_ingestion_tasks.py
 tests/test_prepare_prices.py
 tests/test_price_client.py
 tests/test_run_pipeline.py

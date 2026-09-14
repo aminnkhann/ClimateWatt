@@ -98,10 +98,10 @@ docker compose --profile airflow up -d airflow-webserver airflow-scheduler
 ### Price-data coverage
 
 `data/input/electricity_prices_sample.csv` is a complete **hourly** development
-sample for 2025-01-01. Trigger the demo DAG for that UTC day, or replace/mount
-`PRICES_CSV` with a complete hourly or 15-minute CSV that covers every requested
-Airflow data interval. A static sample cannot provide market prices for future
-scheduled runs.
+sample for the DAG interval from 2025-01-01 02:00 UTC to 2025-01-02 02:00 UTC.
+Trigger the demo DAG for that interval, or replace the CSV with complete hourly
+or 15-minute data for every requested Airflow data interval. A static sample
+cannot provide market prices for future scheduled runs.
 
 ---
 

@@ -85,14 +85,16 @@ def test_negative_prices_and_period_filtering(tmp_path, prices):
 
 def test_committed_price_sample_covers_a_complete_demo_day(tmp_path):
     sample = Path(__file__).parents[1] / "data/input/electricity_prices_sample.csv"
+    start = "2025-01-01T02:00:00Z"
+    end = "2025-01-02T02:00:00Z"
 
-    artifact = tasks.fetch_prices_task(START, END, tmp_path, prices_csv=sample)
+    artifact = tasks.fetch_prices_task(start, end, tmp_path, prices_csv=sample)
 
     result = pd.read_csv(artifact)
     assert len(result) == 24
     timestamps = pd.to_datetime(result.timestamp_utc, utc=True)
-    assert timestamps.iloc[0] == pd.Timestamp(START)
-    assert timestamps.iloc[-1] == pd.Timestamp("2025-01-01T23:00:00Z")
+    assert timestamps.iloc[0] == pd.Timestamp(start)
+    assert timestamps.iloc[-1] == pd.Timestamp("2025-01-02T01:00:00Z")
 
 
 @pytest.mark.parametrize("problem", ["timestamp", "gap", "duplicate", "value"])
