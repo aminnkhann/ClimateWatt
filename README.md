@@ -380,13 +380,198 @@ steps again afterward.
 
 ## Security and repository hygiene
 
-- `.env`, `.env.city`, generated output, local screenshots, and local docs are
-  ignored by Git.
+- `.env`, `.env.city`, generated output, and local docs are ignored by Git.
+- The walkthrough screenshots are intentionally tracked so the README renders
+  correctly on GitHub.
 - Do not commit passwords, production database URLs, API keys, or downloaded
   market data unless explicitly intended and licensed for distribution.
 - The Compose setup is for local development. The runtime package-install
   mechanism is convenient for learning but a production deployment should use a
   custom, pinned Airflow image.
+
+## Future development roadmap
+
+The current project is a reliable local foundation. The next goal is to evolve
+it into a usable weather-and-energy analytics product while keeping the same
+principles: source traceability, complete time-series data, explicit quality
+checks, and simple operation for non-technical users.
+
+The items below are planned improvements, not features currently delivered by
+this repository.
+
+### 1. Collect complete historical and daily data
+
+Replace the teaching CSV with a documented, automated price-data source and
+retain the original files used by each pipeline run. Historical collection
+should backfill enough data to support seasonal and year-over-year analysis;
+daily collection should keep the dataset current.
+
+**Example workflow**
+
+```text
+Every day at 03:00 UTC
+  → download the completed DE-LU day-ahead price file
+  → store the untouched source file with source date and checksum
+  → validate 24 hourly or 96 quarter-hour records
+  → upsert raw prices and build analytics rows
+  → record source, row count, freshness, and load status
+```
+
+Suggested additions:
+
+- A `raw.source_files` table with filename, URL, checksum, retrieval time, and
+  processing status.
+- Partitioned price and weather tables for efficient multi-year storage.
+- A source registry describing market area, provider, licence, frequency, and
+  expected timezone.
+- Backfill commands that can safely process a selected date range, such as
+  `2023-01-01` through `2025-12-31`.
+- Data-freshness alerts when yesterday’s expected price or weather data is not
+  available.
+
+**Example quality rule:** a DE-LU hourly day is accepted only when it has 24
+unique UTC timestamps; a quarter-hour day is accepted only when it has 96.
+Daylight-saving transitions need their own expected-count rule and explicit
+timezone handling.
+
+### 2. Build a global city and location catalogue
+
+Move from one city in `.env.city` to a maintained location catalogue. Users
+should select a city by name, country, or coordinates, while the pipeline uses
+a stable internal identifier and stores the exact source coordinates.
+
+**Example city record**
+
+| Field | Example |
+|---|---|
+| `city_id` | `berlin-de` |
+| `city_name` | Berlin |
+| `country_code` | DE |
+| `latitude` / `longitude` | `52.5200` / `13.4050` |
+| `timezone` | `Europe/Berlin` |
+| `market_area` | `DE-LU` |
+
+Suggested capabilities:
+
+- Searchable cities worldwide using a trusted geographic dataset.
+- Validation that disambiguates names such as “Springfield” by country and
+  coordinates.
+- City-to-market-area mapping, because electricity prices generally apply to a
+  market region rather than an individual city.
+- Multiple selected cities in one run, with per-city weather rows and shared
+  regional price rows.
+
+**Example user action:** choose “Toronto, Canada” in the app; the application
+stores its coordinates and timezone, selects the configured Ontario market data
+source, then starts collecting weather and price data for that location.
+
+### 3. Add trends, statistics, and interpretable cost analysis
+
+Create documented metrics that help users understand price behavior without
+overstating causality. Weather variables can be associated with prices, but a
+correlation alone does not prove that weather caused a price change.
+
+**Example dashboard metrics**
+
+| Question | Example calculation |
+|---|---|
+| How expensive was this week? | Mean, median, minimum, and maximum EUR/MWh by week. |
+| When are prices usually highest? | Average price by UTC hour and weekday. |
+| Does cold weather coincide with higher prices? | Compare temperature bands with median price and display correlation plus sample size. |
+| How volatile is the market? | Rolling 7-day standard deviation and day-to-day percentage change. |
+| What would wholesale energy cost? | `consumption_mwh × electricity_price_eur_mwh`. |
+
+**Payment interpretation example:** if a household uses `0.35 MWh` in a period
+whose average wholesale price is `90 EUR/MWh`, the wholesale-energy component is
+`31.50 EUR`. This is not a final consumer bill: network charges, taxes, levies,
+supplier margin, fixed fees, and the customer’s tariff must be shown separately
+or clearly marked as unavailable.
+
+Recommended analytical outputs:
+
+- Daily, weekly, monthly, seasonal, and year-over-year comparisons.
+- Temperature, wind, humidity, and cloud-cover bands with confidence intervals.
+- Peak-price events with the surrounding weather and market context.
+- Downloadable CSV and chart data, including metric definitions and date range.
+- A methodology page that labels observed relationships as descriptive rather
+  than causal unless a suitable causal study is performed.
+
+### 4. Deliver a simple one-click application
+
+Add a small web application—Streamlit is a practical first choice—that reads
+from the analytics database and hides infrastructure complexity behind a clear
+interface. The first experience should work after cloning the repository and
+starting one documented command.
+
+**Target user journey**
+
+```text
+Clone repository
+  → copy configuration templates
+  → run one start command
+  → open a browser
+  → choose a city, date range, and market area
+  → view trends, statistics, and cost explanations
+```
+
+**Example one-command local start**
+
+```bash
+docker compose --profile app up --build
+```
+
+That future Compose profile could start PostgreSQL, the Airflow scheduler, and
+an application at `http://localhost:8501`. A GitHub Release should also provide
+a versioned source archive and clear platform-specific instructions.
+
+Suggested app screens:
+
+| Screen | Example interaction |
+|---|---|
+| Overview | Select Berlin and the last 30 days; see price, temperature, and data-freshness cards. |
+| Trends | Compare weekday/hour heatmaps for price and temperature. |
+| Cost estimator | Enter `250 kWh`; see the estimated wholesale component and a clear list of excluded bill items. |
+| City comparison | Compare Hamburg, Berlin, and Munich over the same date range. |
+| Data quality | See source timestamp, loaded row count, missing intervals, and last successful pipeline run. |
+
+The application should be read-only by default. Administrative actions such as
+adding a data source, running backfills, or changing credentials should require
+separate authenticated controls.
+
+### 5. Strengthen reliability, governance, and deployment
+
+As the project moves beyond local learning, replace runtime package installation
+with a custom version-pinned Docker image and add repeatable automation.
+
+**Example production-ready delivery path**
+
+1. Build an immutable application image in CI.
+2. Run unit, integration, and data-quality tests on every pull request.
+3. Publish the image only after tests and security scans pass.
+4. Deploy configuration and secrets through the target platform’s secret store.
+5. Monitor task failures, source freshness, database growth, and API limits.
+
+Additional safeguards:
+
+- Role-based access for app users and administrators.
+- Encrypted backups and a tested restore procedure.
+- Retention policies for raw files and analytics tables.
+- Source licences and attribution recorded alongside downloaded data.
+- Alerting for failed DAG runs, stale data, and unusual price values.
+
+### Proposed delivery milestones
+
+| Milestone | Deliverable | Demonstration of completion |
+|---|---|---|
+| M1 — Complete data | Automated historical backfill and daily price ingestion. | A year of validated data is loaded reproducibly from documented sources. |
+| M2 — Multi-city | Global city catalogue and market mapping. | A user can select three cities and receive separate weather series with the correct market data. |
+| M3 — Analytics | Trend, volatility, and transparent cost metrics. | A dashboard shows weekly trends and explains each calculation with an example. |
+| M4 — App | One-command local web application. | A new user clones the repo, runs the documented command, and uses the app in a browser. |
+| M5 — Operations | CI, backups, observability, and release process. | A failed source load produces an alert and a documented recovery path. |
+
+This roadmap keeps the project focused: first obtain trustworthy, complete data;
+then make insights understandable; finally make the experience accessible to
+anyone who can clone the repository and start the application.
 
 ## License
 
