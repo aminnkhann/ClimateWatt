@@ -13,6 +13,7 @@ from weather_energy.ingestion_tasks import (
     build_analytics_task,
     fetch_prices_task,
     fetch_weather_task,
+    initialize_database_task,
     load_prices_raw_task,
     load_weather_raw_task,
     validate_analytics_task,
@@ -42,6 +43,11 @@ def _processing_interval() -> tuple[str, str]:
 )
 def weather_energy_daily():
     @task
+    def initialize_database_schema() -> None:
+        settings = get_settings()
+        initialize_database_task(database_url=settings.database_url)
+
+    @task
     def fetch_weather() -> str:
         settings = get_settings()
         start, end = _processing_interval()
@@ -69,7 +75,7 @@ def weather_energy_daily():
         )
 
     @task
-    def load_weather_raw(artifact: str) -> int:
+    def load_weather_raw(artifact: str, _schema_ready: None) -> int:
         settings = get_settings()
         start, end = _processing_interval()
         return load_weather_raw_task(
@@ -81,7 +87,7 @@ def weather_energy_daily():
         )
 
     @task
-    def load_prices_raw(artifact: str) -> int:
+    def load_prices_raw(artifact: str, _schema_ready: None) -> int:
         settings = get_settings()
         start, end = _processing_interval()
         return load_prices_raw_task(
@@ -118,8 +124,9 @@ def weather_energy_daily():
 
     weather_artifact = fetch_weather()
     price_artifact = fetch_prices()
-    weather_rows = load_weather_raw(weather_artifact)
-    price_rows = load_prices_raw(price_artifact)
+    schema_ready = initialize_database_schema()
+    weather_rows = load_weather_raw(weather_artifact, schema_ready)
+    price_rows = load_prices_raw(price_artifact, schema_ready)
     analytics_rows = build_analytics(weather_rows, price_rows)
     validate_analytics(analytics_rows)
 

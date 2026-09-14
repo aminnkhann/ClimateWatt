@@ -143,6 +143,17 @@ def fetch_prices_task(start, end, staging_dir, *, prices_csv, market_area="DE-LU
     return _write(prices, staging_dir, "prices-", start, end, market_area)
 
 
+def initialize_database_task(*, database_url):
+    """Create the pipeline schemas before any raw-load task runs.
+
+    ``initialize_database`` is idempotent, so this is safe for every DAG run
+    and also supports databases that were not created through Docker Compose.
+    """
+    with psycopg.connect(database_url) as connection:
+        initialize_database(connection)
+    LOGGER.info("Initialized weather-energy database schema")
+
+
 def load_weather_raw_task(artifact, start, end, *, database_url, city="Hamburg"):
     """Validate staged weather and commit its upsert in one transaction."""
     city = city.strip()

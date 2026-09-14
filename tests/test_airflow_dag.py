@@ -13,6 +13,7 @@ def test_weather_energy_daily_dag_is_parseable_and_thin():
     assert "weather_energy_daily" in path.read_text()
     assert "fetch_weather_task" in calls
     assert "fetch_prices_task" in calls
+    assert "initialize_database_task" in calls
     assert "load_weather_raw_task" in calls
     assert "load_prices_raw_task" in calls
     assert "build_analytics_task" in calls
