@@ -147,6 +147,7 @@ def test_load_transaction_and_upsert(monkeypatch, tmp_path, weather, prices, sou
         for _ in range(2):
             assert loader(artifact, START, END, database_url="secret-url") == 24
     assert exits == ["committed", "committed"]
+    assert len(statements) == 2
     assert all("ON CONFLICT" in sql and len(rows) == 24 for sql, rows in statements)
     assert "secret-url" not in caplog.text
     assert "rows=24" in caplog.text
@@ -162,3 +163,136 @@ def test_corrupt_artifact_never_opens_database(monkeypatch, tmp_path, prices):
     monkeypatch.setattr(tasks.psycopg, "connect", connect)
     with pytest.raises(ValueError, match="coverage"):
         tasks.load_prices_raw_task(artifact, START, END, database_url="unused")
+
+
+def test_incomplete_quarter_hour_prices_fail(tmp_path):
+    frame = pd.DataFrame(
+        {
+            "timestamp_utc": [
+                "2025-01-01T00:00:00Z",
+                "2025-01-01T00:15:00Z",
+                # 00:30 intentionally missing
+                "2025-01-01T00:45:00Z",
+            ],
+            "market_area": ["DE-LU"] * 3,
+            "electricity_price_eur_mwh": [10.0, 20.0, 30.0],
+        }
+    )
+
+    prices_csv = tmp_path / "quarter_hour_prices.csv"
+    frame.to_csv(prices_csv, index=False)
+
+    with pytest.raises(
+        ValueError,
+        match="quarter|15-minute|incomplete",
+    ):
+        tasks.fetch_prices_task(
+            "2025-01-01T00:00:00Z",
+            "2025-01-01T01:00:00Z",
+            tmp_path,
+            prices_csv=prices_csv,
+            market_area="DE-LU",
+        )
+
+    assert not list(tmp_path.glob("prices-*.csv"))
+
+
+@pytest.mark.parametrize("minutes", [[0, 15, 30, 45], [0, 10, 30, 45]])
+def test_quarter_hour_alignment_and_average(tmp_path, minutes):
+    path = tmp_path / "input.csv"
+    pd.DataFrame({
+        "timestamp_utc": [pd.Timestamp(START) + pd.Timedelta(m, unit="min") for m in minutes],
+        "market_area": "DE-LU", "electricity_price_eur_mwh": [-10, 10, 30, 50],
+    }).to_csv(path, index=False)
+    if minutes == [0, 15, 30, 45]:
+        artifact = tasks.fetch_prices_task(START, "2025-01-01T01:00:00Z", tmp_path,
+                                          prices_csv=path)
+        assert pd.read_csv(artifact).electricity_price_eur_mwh.tolist() == [20.0]
+    else:
+        with pytest.raises(ValueError, match="15-minute"):
+            tasks.fetch_prices_task(START, "2025-01-01T01:00:00Z", tmp_path, prices_csv=path)
+
+
+@pytest.mark.parametrize("source", ["weather", "prices"])
+@pytest.mark.parametrize("operation", ["fetch", "load"])
+@pytest.mark.parametrize("value", ["", "   "])
+def test_empty_identity_fails_before_io(monkeypatch, tmp_path, source, operation, value):
+    def unexpected(*args, **kwargs):
+        pytest.fail("Empty identity must fail before I/O")
+
+    monkeypatch.setattr(tasks, "fetch_weather", unexpected)
+    monkeypatch.setattr(tasks, "read_price_csv", unexpected)
+    monkeypatch.setattr(tasks.pd, "read_csv", unexpected)
+    monkeypatch.setattr(tasks.psycopg, "connect", unexpected)
+    identity = {"city" if source == "weather" else "market_area": value}
+    message = "City must not be empty" if source == "weather" else "Market area must not be empty"
+    with pytest.raises(ValueError, match=message):
+        if operation == "fetch":
+            extra = {"prices_csv": tmp_path / "missing.csv"} if source == "prices" else {}
+            getattr(tasks, f"fetch_{source}_task")(START, END, tmp_path, **identity, **extra)
+        else:
+            getattr(tasks, f"load_{source}_raw_task")(
+                tmp_path / "missing.csv", START, END, database_url="unused", **identity,
+            )
+
+
+@pytest.mark.parametrize("source", ["weather", "prices"])
+def test_padded_identity_fetch_and_load(monkeypatch, tmp_path, weather, prices, source):
+    def fetch(*args, **kwargs):
+        assert kwargs["city"] == "Hamburg"
+        return weather
+
+    monkeypatch.setattr(tasks, "fetch_weather", fetch)
+    identity = {"city": " Hamburg "} if source == "weather" else {"market_area": " DE-LU "}
+    extra = {"prices_csv": prices} if source == "prices" else {}
+    artifact = getattr(tasks, f"fetch_{source}_task")(START, END, tmp_path, **identity, **extra)
+    loaded = []
+
+    @contextmanager
+    def connect(url):
+        yield object()
+
+    monkeypatch.setattr(tasks.psycopg, "connect", connect)
+    monkeypatch.setattr(tasks, f"load_{source}", lambda conn, frame: loaded.append(frame))
+    assert getattr(tasks, f"load_{source}_raw_task")(
+        artifact, START, END, database_url="unused", **identity,
+    ) == 24
+    assert len(loaded) == 1
+    key = "city" if source == "weather" else "market_area"
+    assert loaded[0][key].unique().tolist() == [identity[key].strip()]
+
+
+@pytest.mark.parametrize("source", ["weather", "prices"])
+@pytest.mark.parametrize("failure_at", ["connect", "write"])
+def test_database_errors_propagate(monkeypatch, tmp_path, weather, prices, source,
+                                   failure_at, caplog):
+    monkeypatch.setattr(tasks, "fetch_weather", lambda *a, **kw: weather)
+    extra = {"prices_csv": prices} if source == "prices" else {}
+    artifact = getattr(tasks, f"fetch_{source}_task")(START, END, tmp_path, **extra)
+    error = tasks.psycopg.OperationalError("temporary database failure")
+    transaction_errors = []
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            # psycopg uses this exception to roll back; no real database here.
+            transaction_errors.append(exc_value)
+            return False
+
+    def connect(url):
+        if failure_at == "connect":
+            raise error
+        return Connection()
+
+    def write(*args):
+        raise error
+
+    monkeypatch.setattr(tasks.psycopg, "connect", connect)
+    monkeypatch.setattr(tasks, f"load_{source}", write)
+    with caplog.at_level("INFO"), pytest.raises(tasks.psycopg.OperationalError) as caught:
+        getattr(tasks, f"load_{source}_raw_task")(artifact, START, END, database_url="unused")
+    assert caught.value is error
+    assert transaction_errors == ([error] if failure_at == "write" else [])
+    assert "Loaded " not in caplog.text
