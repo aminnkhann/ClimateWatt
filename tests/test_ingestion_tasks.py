@@ -165,6 +165,27 @@ def test_corrupt_artifact_never_opens_database(monkeypatch, tmp_path, prices):
         tasks.load_prices_raw_task(artifact, START, END, database_url="unused")
 
 
+def test_initialize_database_task_opens_a_connection_and_initializes_schema(monkeypatch, caplog):
+    connection = object()
+    initialized = []
+
+    @contextmanager
+    def connect(url):
+        assert url == "postgresql://example"
+        yield connection
+
+    monkeypatch.setattr(tasks.psycopg, "connect", connect)
+    monkeypatch.setattr(
+        tasks, "initialize_database", lambda received: initialized.append(received)
+    )
+
+    with caplog.at_level("INFO"):
+        tasks.initialize_database_task(database_url="postgresql://example")
+
+    assert initialized == [connection]
+    assert "Initialized weather-energy database schema" in caplog.text
+
+
 def test_incomplete_quarter_hour_prices_fail(tmp_path):
     frame = pd.DataFrame(
         {
